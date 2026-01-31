@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { RefreshCcw, Download, TerminalSquare, Trash2 } from 'lucide-react'
+import { RefreshCcw, TerminalSquare, Trash2 } from 'lucide-react'
 import { logsApi } from '@/lib/api'
 
 export default function LogsPage() {

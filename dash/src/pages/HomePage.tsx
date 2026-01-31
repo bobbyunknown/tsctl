@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { authApi, serveApi, funnelApi, sshApi } from '../lib/api'
+import { serveApi, funnelApi, sshApi } from '../lib/api'
 import { useTailscaleWS } from '../hooks/useWebSocket'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,17 +12,15 @@ import {
     Terminal,
     Zap,
     Globe,
-    Radio,
     Server,
     Network,
-    Activity,
     Cpu,
     Lock,
     Wifi,
-    Shield,
     Calendar,
     Users,
-    ExternalLink
+    ExternalLink,
+    Copy,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -71,7 +69,7 @@ const InfoCard = ({
 )
 
 export default function HomePage() {
-    const { authStatus, serveStatus, connectionState, isConnected } = useTailscaleWS()
+    const { authStatus, serveStatus } = useTailscaleWS()
     const [servePort, setServePort] = useState('8080')
     const [funnelPort, setFunnelPort] = useState('443')
     const [loading, setLoading] = useState(false)
@@ -81,9 +79,7 @@ export default function HomePage() {
         const fetchInitial = async () => {
             try {
                 const data = await serveApi.getStatus()
-                if (data.data) {
-                    setActiveServices(JSON.parse(data.data))
-                }
+                setActiveServices(data)
             } catch (error) {
                 console.error('Failed to fetch initial services:', error)
             }
@@ -93,11 +89,7 @@ export default function HomePage() {
 
     useEffect(() => {
         if (serveStatus) {
-            try {
-                setActiveServices(JSON.parse(serveStatus))
-            } catch (error) {
-                console.error('Failed to parse serve status:', error)
-            }
+            setActiveServices(serveStatus)
         }
     }, [serveStatus])
 
@@ -265,32 +257,48 @@ export default function HomePage() {
                         Active Services
                     </h3>
                     <div className="space-y-2">
-                        {activeServices.services.map((service: any) => (
-                            <div key={service.port} className="flex items-center justify-between p-3 rounded-lg bg-secondary/40 border border-border/50">
-                                <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-3">
-                                        <Badge variant={service.type === 'funnel' ? "default" : "secondary"} className="text-[10px] font-mono">
-                                            {service.type.toUpperCase()}
-                                        </Badge>
-                                        <span className="text-sm font-mono text-foreground">Port {service.port}</span>
+                        {activeServices.services.map((service: any) => {
+                            const cleanUrl = service.public_url?.replace(/\.+$/, '')
+                            return (
+                                <div key={service.port} className="flex items-center justify-between p-3 rounded-lg bg-secondary/40 border border-border/50">
+                                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                                        <div className="flex items-center gap-3">
+                                            <Badge variant={service.type === 'funnel' ? "default" : "secondary"} className="text-[10px] font-mono">
+                                                {service.type.toUpperCase()}
+                                            </Badge>
+                                            <span className="text-sm font-mono text-foreground">Port {service.port}</span>
+                                        </div>
+                                        {cleanUrl && (
+                                            <div className="flex items-center gap-2 ml-16">
+                                                <span className="text-xs font-mono text-muted-foreground truncate">{cleanUrl}</span>
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-5 w-5 p-0"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(cleanUrl)
+                                                        toast.success('URL copied')
+                                                    }}
+                                                >
+                                                    <Copy className="w-3 h-3" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
-                                    {service.public_url && (
-                                        <span className="text-xs font-mono text-muted-foreground ml-16">{service.public_url}</span>
+                                    {cleanUrl && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 gap-1.5 text-xs"
+                                            onClick={() => window.open(cleanUrl, '_blank')}
+                                        >
+                                            Open
+                                            <ExternalLink className="w-3 h-3" />
+                                        </Button>
                                     )}
                                 </div>
-                                {service.public_url && (
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-7 gap-1.5 text-xs"
-                                        onClick={() => window.open(service.public_url, '_blank')}
-                                    >
-                                        Open
-                                        <ExternalLink className="w-3 h-3" />
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
+                            )
+                        })}
                     </div>
                 </Card>
             )}

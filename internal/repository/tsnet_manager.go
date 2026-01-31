@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"tsctl/pkg/config"
 	"tsctl/pkg/logger"
@@ -49,7 +51,30 @@ func (t *TsnetManager) Start(ctx context.Context) error {
 		"ips":      status.Self.TailscaleIPs,
 	}).Info("embedded daemon started successfully")
 
+	go func() {
+		time.Sleep(2 * time.Second)
+		t.RestoreServeConfig(ctx)
+	}()
+
 	return nil
+}
+
+func (t *TsnetManager) RestoreServeConfig(ctx context.Context) {
+	lc, err := t.server.LocalClient()
+	if err != nil {
+		logger.Log.WithError(err).Warn("failed to get local client for restore")
+		return
+	}
+
+	existingConfig, err := lc.GetServeConfig(ctx)
+	if err != nil {
+		logger.Log.WithError(err).Debug("no existing serve config to restore")
+		return
+	}
+
+	if existingConfig != nil && (existingConfig.TCP != nil || existingConfig.Web != nil) {
+		logger.Log.Info("restored serve config from state store")
+	}
 }
 
 func (t *TsnetManager) Stop() error {
@@ -102,12 +127,29 @@ func (t *TsnetManager) Serve(port int, background bool) (string, error) {
 
 func (t *TsnetManager) Funnel(port int, background bool) (string, error) {
 	ctx := context.Background()
+
+	status, err := t.getStatus(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	dnsName := strings.TrimSuffix(status.Self.DNSName, ".")
+
 	config := &ipn.ServeConfig{
 		TCP: map[uint16]*ipn.TCPPortHandler{
-			uint16(port): {HTTPS: true},
+			443: {HTTPS: true},
+		},
+		Web: map[ipn.HostPort]*ipn.WebServerConfig{
+			ipn.HostPort(fmt.Sprintf("%s:443", dnsName)): {
+				Handlers: map[string]*ipn.HTTPHandler{
+					"/": {
+						Proxy: fmt.Sprintf("http://127.0.0.1:%d", port),
+					},
+				},
+			},
 		},
 		AllowFunnel: map[ipn.HostPort]bool{
-			ipn.HostPort(fmt.Sprintf(":%d", port)): true,
+			ipn.HostPort(fmt.Sprintf("%s:443", dnsName)): true,
 		},
 	}
 
@@ -144,7 +186,7 @@ func (t *TsnetManager) ServeStatus() (string, error) {
 		Services: []Service{},
 	}
 
-	dnsName := status.Self.DNSName
+	dnsName := strings.TrimSuffix(status.Self.DNSName, ".")
 	if config != nil && config.TCP != nil {
 		for port := range config.TCP {
 			svc := Service{
@@ -154,10 +196,18 @@ func (t *TsnetManager) ServeStatus() (string, error) {
 			}
 
 			if config.AllowFunnel != nil {
-				portKey := ipn.HostPort(fmt.Sprintf(":%d", port))
-				if config.AllowFunnel[portKey] {
+				portKey443 := ipn.HostPort(fmt.Sprintf("%s:443", dnsName))
+				if config.AllowFunnel[portKey443] && port == 443 {
 					svc.Type = "funnel"
-					svc.PublicURL = fmt.Sprintf("https://%s:%d", dnsName, port)
+					svc.PublicURL = fmt.Sprintf("https://%s/", dnsName)
+
+					if config.Web != nil {
+						if webCfg, ok := config.Web[portKey443]; ok {
+							if handler, ok := webCfg.Handlers["/"]; ok && handler.Proxy != "" {
+								svc.LocalURL = handler.Proxy
+							}
+						}
+					}
 				}
 			}
 

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"tsctl/internal/domain"
@@ -29,12 +30,30 @@ func (u *TailscaleUseCase) StartFunnel(port int, background bool) (string, error
 	return u.service.Funnel(port, background)
 }
 
-func (u *TailscaleUseCase) GetServeStatus() (string, error) {
-	return u.service.ServeStatus()
+func (u *TailscaleUseCase) GetServeStatus() (*ServeStatusResponse, error) {
+	jsonStr, err := u.service.ServeStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	var status ServeStatusResponse
+	if err := json.Unmarshal([]byte(jsonStr), &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
 }
 
-func (u *TailscaleUseCase) GetFunnelStatus() (string, error) {
-	return u.service.FunnelStatus()
+func (u *TailscaleUseCase) GetFunnelStatus() (*ServeStatusResponse, error) {
+	jsonStr, err := u.service.FunnelStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	var status ServeStatusResponse
+	if err := json.Unmarshal([]byte(jsonStr), &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
 }
 
 func (u *TailscaleUseCase) ResetServe() error {
@@ -49,8 +68,17 @@ func (u *TailscaleUseCase) EnableSSH() error {
 	return u.service.EnableSSH()
 }
 
-func (u *TailscaleUseCase) GetStatus() (string, error) {
-	return u.service.Status()
+func (u *TailscaleUseCase) GetStatus() (*StatusResponse, error) {
+	jsonStr, err := u.service.Status()
+	if err != nil {
+		return nil, err
+	}
+
+	var status StatusResponse
+	if err := json.Unmarshal([]byte(jsonStr), &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
 }
 
 func (u *TailscaleUseCase) GetAuthStatus() (map[string]interface{}, error) {

@@ -33,6 +33,17 @@ export interface ApiResponse<T = any> {
     data?: T
 }
 
+export interface ServiceInfo {
+    port: number
+    type: 'serve' | 'funnel'
+    local_url: string
+    public_url?: string
+}
+
+export interface ServeStatus {
+    services: ServiceInfo[]
+}
+
 export const authApi = {
     getStatus: async (): Promise<AuthStatus> => {
         const { data } = await api.get<ApiResponse<AuthStatus>>('/api/v1/auth/status')
@@ -55,9 +66,9 @@ export const serveApi = {
         const { data } = await api.post<ApiResponse>('/api/v1/serve', { port, background })
         return data
     },
-    getStatus: async () => {
-        const { data } = await api.get<ApiResponse>('/api/v1/serve/status')
-        return data
+    getStatus: async (): Promise<ServeStatus> => {
+        const { data } = await api.get<ApiResponse<ServeStatus>>('/api/v1/serve/status')
+        return data.data!
     },
     reset: async () => {
         const { data } = await api.delete<ApiResponse>('/api/v1/serve')
@@ -70,9 +81,9 @@ export const funnelApi = {
         const { data } = await api.post<ApiResponse>('/api/v1/funnel', { port, background })
         return data
     },
-    getStatus: async () => {
-        const { data } = await api.get<ApiResponse>('/api/v1/funnel/status')
-        return data
+    getStatus: async (): Promise<ServeStatus> => {
+        const { data } = await api.get<ApiResponse<ServeStatus>>('/api/v1/funnel/status')
+        return data.data!
     },
     reset: async () => {
         const { data } = await api.delete<ApiResponse>('/api/v1/funnel')
