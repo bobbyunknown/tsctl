@@ -13,17 +13,16 @@ type Config struct {
 }
 
 type TailscaleConfig struct {
-	BinaryPath string `yaml:"binary_path"`
-	DaemonPath string `yaml:"daemon_path"`
-	SocketPath string `yaml:"socket_path"`
-	AutoStart  bool   `yaml:"auto_start"`
+	StateDir  string `yaml:"state_dir"`
+	Hostname  string `yaml:"hostname"`
+	AuthKey   string `yaml:"auth_key"`
+	Ephemeral bool   `yaml:"ephemeral"`
 }
 
 type LoggingConfig struct {
-	AppLogPath    string `yaml:"app_log_path"`
-	DaemonLogPath string `yaml:"daemon_log_path"`
-	Level         string `yaml:"level"`
-	Format        string `yaml:"format"`
+	AppLogPath string `yaml:"app_log_path"`
+	Level      string `yaml:"level"`
+	Format     string `yaml:"format"`
 }
 
 type ServerConfig struct {
@@ -68,13 +67,4 @@ func Save() error {
 
 func Get() *Config {
 	return cfg
-}
-
-func SetAutoStart(enabled bool) error {
-	if cfg == nil {
-		return nil
-	}
-
-	cfg.Tailscale.AutoStart = enabled
-	return Save()
 }

@@ -1,4 +1,4 @@
 bin/
 logs/
-docs/
 *.log
+tsnet-state/

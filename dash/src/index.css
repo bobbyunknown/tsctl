@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 15% 10%;
+
+    --card: 0 0% 100%;
+    /* Pure white cards */
+    --card-foreground: 220 15% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 10%;
+
+    --primary: 220 15% 10%;
+    /* Dark primary */
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 220 10% 95%;
+    /* Subtle gray */
+    --secondary-foreground: 220 15% 10%;
+
+    --muted: 220 10% 95%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent: 220 10% 95%;
+    --accent-foreground: 220 15% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 13% 91%;
+    /* Soft borders */
+    --input: 220 13% 91%;
+    --ring: 220 15% 10%;
+    --radius: 0.5rem;
+
+    --navbar-bg: 0 0% 100%;
+    --navbar-border: 220 13% 91%;
+  }
+
+  .dark {
+    /* Dark Mode - Deep Charcoal / Premium Tech */
+    --background: 224 71% 4%;
+    /* #030711 - Very dark navy/charcoal */
+    --foreground: 210 40% 98%;
+
+    --card: 224 71% 4%;
+    /* Seamless cards */
+    --card-foreground: 210 40% 98%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    /* White primary */
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 12%;
+    /* Very subtle secondary */
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 12%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 12%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17%;
+    /* Darker border for dark mode */
+    --input: 217.2 32.6% 17%;
+    --ring: 212.7 26.8% 83.9%;
+
+    --navbar-bg: 224 71% 4%;
+    --navbar-border: 217.2 32.6% 17%;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+}

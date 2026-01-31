@@ -2,9 +2,13 @@ package http
 
 import (
 	"bufio"
+	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
 
+	"tsctl/internal/delivery/http/websocket"
 	"tsctl/internal/usecase"
 	"tsctl/pkg/config"
 
@@ -12,14 +16,14 @@ import (
 )
 
 type Handler struct {
-	daemonUC    *usecase.DaemonUseCase
 	tailscaleUC *usecase.TailscaleUseCase
+	wsHub       *websocket.Hub
 }
 
-func NewHandler(daemonUC *usecase.DaemonUseCase, tailscaleUC *usecase.TailscaleUseCase) *Handler {
+func NewHandler(tailscaleUC *usecase.TailscaleUseCase, wsHub *websocket.Hub) *Handler {
 	return &Handler{
-		daemonUC:    daemonUC,
 		tailscaleUC: tailscaleUC,
+		wsHub:       wsHub,
 	}
 }
 
@@ -39,70 +43,30 @@ type FunnelRequest struct {
 	Background bool `json:"background"`
 }
 
-// @Summary Start daemon
-// @Description Start the tailscaled daemon process
-// @Tags daemon
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/daemon/start [post]
-func (h *Handler) StartDaemon(c *gin.Context) {
-	err := h.daemonUC.Start()
+func (h *Handler) GetAuthStatus(c *gin.Context) {
+	status, err := h.tailscaleUC.GetAuthStatus()
 	if err != nil {
 		c.JSON(500, Response{Success: false, Message: err.Error()})
 		return
 	}
-	c.JSON(200, Response{Success: true, Message: "daemon started"})
+
+	c.JSON(200, Response{
+		Success: true,
+		Data:    status,
+	})
 }
 
-// @Summary Stop daemon
-// @Description Stop the tailscaled daemon process
-// @Tags daemon
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/daemon/stop [post]
-func (h *Handler) StopDaemon(c *gin.Context) {
-	err := h.daemonUC.Stop()
+func (h *Handler) Logout(c *gin.Context) {
+	err := h.tailscaleUC.Logout()
 	if err != nil {
 		c.JSON(500, Response{Success: false, Message: err.Error()})
 		return
 	}
-	c.JSON(200, Response{Success: true, Message: "daemon stopped"})
-}
 
-// @Summary Restart daemon
-// @Description Restart the tailscaled daemon process
-// @Tags daemon
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/daemon/restart [post]
-func (h *Handler) RestartDaemon(c *gin.Context) {
-	err := h.daemonUC.Restart()
-	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
-	}
-	c.JSON(200, Response{Success: true, Message: "daemon restarted"})
-}
-
-// @Summary Get daemon status
-// @Description Get the current status of tailscaled daemon
-// @Tags daemon
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/daemon/status [get]
-func (h *Handler) DaemonStatus(c *gin.Context) {
-	status, err := h.daemonUC.Status()
-	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
-	}
-	c.JSON(200, Response{Success: true, Data: status})
+	c.JSON(200, Response{
+		Success: true,
+		Message: "logged out from tailnet - restart required to reconnect",
+	})
 }
 
 // @Summary Start serve
@@ -127,6 +91,13 @@ func (h *Handler) StartServe(c *gin.Context) {
 		c.JSON(500, Response{Success: false, Message: err.Error()})
 		return
 	}
+
+	status, _ := h.tailscaleUC.GetServeStatus()
+	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+
 	c.JSON(200, Response{Success: true, Message: "serve started", Data: output})
 }
 
@@ -152,6 +123,13 @@ func (h *Handler) StartFunnel(c *gin.Context) {
 		c.JSON(500, Response{Success: false, Message: err.Error()})
 		return
 	}
+
+	status, _ := h.tailscaleUC.GetServeStatus()
+	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+
 	c.JSON(200, Response{Success: true, Message: "funnel started", Data: output})
 }
 
@@ -200,6 +178,13 @@ func (h *Handler) ResetServe(c *gin.Context) {
 		c.JSON(500, Response{Success: false, Message: err.Error()})
 		return
 	}
+
+	status, _ := h.tailscaleUC.GetServeStatus()
+	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+
 	c.JSON(200, Response{Success: true, Message: "serve config reset"})
 }
 
@@ -216,6 +201,13 @@ func (h *Handler) ResetFunnel(c *gin.Context) {
 		c.JSON(500, Response{Success: false, Message: err.Error()})
 		return
 	}
+
+	status, _ := h.tailscaleUC.GetServeStatus()
+	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+
 	c.JSON(200, Response{Success: true, Message: "funnel config reset"})
 }
 
@@ -270,23 +262,17 @@ func (h *Handler) GetAppLogs(c *gin.Context) {
 	c.JSON(200, Response{Success: true, Data: logs})
 }
 
-// @Summary Get daemon logs
-// @Description Get tailscaled daemon log file content
-// @Tags logs
-// @Produce json
-// @Param lines query int false "Number of lines to retrieve" default(100)
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/logs/daemon [get]
-func (h *Handler) GetDaemonLogs(c *gin.Context) {
-	lines := c.DefaultQuery("lines", "100")
-	cfg := config.Get()
-	logs, err := readLastLines(cfg.Logging.DaemonLogPath, lines)
+func (h *Handler) ClearLogs(c *gin.Context) {
+	config := config.Get()
+	logPath := config.Logging.AppLogPath
+
+	err := os.Truncate(logPath, 0)
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
+		c.JSON(500, Response{Success: false, Message: fmt.Sprintf("Failed to clear logs: %v", err)})
 		return
 	}
-	c.JSON(200, Response{Success: true, Data: logs})
+
+	c.JSON(200, Response{Success: true, Message: "Logs cleared successfully"})
 }
 
 func readLastLines(filePath string, linesCount string) ([]string, error) {
@@ -312,4 +298,47 @@ func readLastLines(filePath string, linesCount string) ([]string, error) {
 	}
 
 	return lines[len(lines)-count:], nil
+}
+
+// ProxyAvatar proxies avatar images from external sources (Google, GitHub, etc)
+// to avoid CORS issues in the browser
+func (h *Handler) ProxyAvatar(c *gin.Context) {
+	status, err := h.tailscaleUC.GetAuthStatus()
+	if err != nil {
+		c.JSON(500, Response{Success: false, Message: err.Error()})
+		return
+	}
+
+	avatarURL, ok := status["user_profile_pic"].(string)
+	if !ok || avatarURL == "" {
+		c.Status(404)
+		return
+	}
+
+	// Fetch the avatar from external URL
+	resp, err := http.Get(avatarURL)
+	if err != nil {
+		c.Status(500)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		c.Status(resp.StatusCode)
+		return
+	}
+
+	// Set appropriate headers
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+	c.Header("Cache-Control", "public, max-age=3600")
+
+	// Copy the image data
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		c.Status(500)
+		return
+	}
 }

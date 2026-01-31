@@ -11,6 +11,7 @@ import (
 	"time"
 
 	httphandler "tsctl/internal/delivery/http"
+	"tsctl/internal/delivery/http/websocket"
 	"tsctl/internal/repository"
 	"tsctl/internal/usecase"
 	"tsctl/pkg/config"
@@ -20,18 +21,10 @@ import (
 )
 
 // @title Tailscale Controller API
-// @version 1.0
-// @description HTTP API for controlling Tailscale daemon and operations
+// @version 2.0
+// @description Self-contained HTTP API for Tailscale with embedded daemon
 // @host localhost:8080
 // @BasePath /
-func clearLogFiles(paths ...string) {
-	for _, path := range paths {
-		if path == "" {
-			continue
-		}
-		os.Remove(path)
-	}
-}
 
 func main() {
 	configPath := flag.String("c", "config/app.yaml", "path to config file")
@@ -43,29 +36,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	clearLogFiles(cfg.Logging.AppLogPath, cfg.Logging.DaemonLogPath)
+	os.Remove(cfg.Logging.AppLogPath)
 
 	if err := logger.Init(cfg.Logging.AppLogPath, cfg.Logging.Level, cfg.Logging.Format); err != nil {
 		fmt.Printf("failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
 
-	logger.Log.Info("tsctl starting")
+	logger.Log.Info("tsctl starting (embedded mode)")
 
-	daemonRepo := repository.NewDaemonManager()
-	tailscaleRepo := repository.NewTailscaleWrapper()
+	tsnetMgr := repository.NewTsnetManager(cfg)
 
-	daemonUC := usecase.NewDaemonUseCase(daemonRepo)
-	tailscaleUC := usecase.NewTailscaleUseCase(tailscaleRepo)
+	ctx := context.Background()
 
-	if cfg.Tailscale.AutoStart {
-		logger.Log.Info("auto_start enabled, starting daemon")
-		if err := daemonUC.Start(); err != nil {
-			logger.Log.WithError(err).Error("failed to auto-start daemon")
-		}
-	}
+	tailscaleUC := usecase.NewTailscaleUseCase(tsnetMgr)
 
-	handler := httphandler.NewHandler(daemonUC, tailscaleUC)
+	wsHub := websocket.NewWebSocketHub()
+	go wsHub.Run()
+
+	handler := httphandler.NewHandler(tailscaleUC, wsHub)
 	router := httphandler.SetupRouter(handler, cfg.Server.Mode)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -75,11 +64,20 @@ func main() {
 	}
 
 	go func() {
-		logger.Log.WithField("addr", addr).Info("server starting")
+		logger.Log.WithField("addr", addr).Info("HTTP server starting")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Log.WithError(err).Fatal("server failed")
 		}
 	}()
+
+	go func() {
+		if err := tsnetMgr.Start(ctx); err != nil {
+			logger.Log.WithError(err).Error("failed to start embedded daemon")
+		}
+	}()
+
+	watcher := websocket.NewStatusWatcher(wsHub, tsnetMgr)
+	go watcher.Start(ctx)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -92,12 +90,6 @@ func main() {
 
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Log.WithError(err).Error("server forced to shutdown")
-	}
-
-	status, _ := daemonUC.Status()
-	if status != nil && status.Running {
-		logger.Log.Info("stopping daemon")
-		daemonUC.Stop()
 	}
 
 	logger.Log.Info("server stopped")

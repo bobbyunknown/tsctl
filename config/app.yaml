@@ -1,14 +1,15 @@
 tailscale:
-    binary_path: /home/insomnia/Downloads/tailscale_1.92.5_amd64/tailscale
-    daemon_path: /home/insomnia/Downloads/tailscale_1.92.5_amd64/tailscaled
-    socket_path: /var/run/tailscale/tailscaled.sock
-    auto_start: false
+    state_dir: ./tsnet-state
+    hostname: tsctl
+    auth_key: ""
+    ephemeral: false
+
 logging:
     app_log_path: ./logs/app.log
-    daemon_log_path: ./logs/daemon.log
-    level: info
-    format: json
+    level: debug
+    format: text
+
 server:
     port: 8080
-    host: localhost
+    host: 0.0.0.0
     mode: debug
