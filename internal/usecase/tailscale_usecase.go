@@ -60,8 +60,16 @@ func (u *TailscaleUseCase) ResetServe() error {
 	return u.service.ServeReset()
 }
 
+func (u *TailscaleUseCase) StopServe(port int) error {
+	return u.service.ServeStop(port)
+}
+
 func (u *TailscaleUseCase) ResetFunnel() error {
 	return u.service.FunnelReset()
+}
+
+func (u *TailscaleUseCase) StopFunnel(port int) error {
+	return u.service.FunnelStop(port)
 }
 
 func (u *TailscaleUseCase) EnableSSH() error {

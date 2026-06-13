@@ -70,6 +70,13 @@ func SetupRouter(handler *Handler, mode string) *gin.Engine {
 	}, handler.ResetServe)
 
 	huma.Register(api, huma.Operation{
+		OperationID: "stop-serve",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/serve/{port}",
+		Tags:        []string{"tailscale"},
+	}, handler.StopServe)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "start-funnel",
 		Method:      http.MethodPost,
 		Path:        "/api/v1/funnel",
@@ -89,6 +96,13 @@ func SetupRouter(handler *Handler, mode string) *gin.Engine {
 		Path:        "/api/v1/funnel",
 		Tags:        []string{"tailscale"},
 	}, handler.ResetFunnel)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "stop-funnel",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/funnel/{port}",
+		Tags:        []string{"tailscale"},
+	}, handler.StopFunnel)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "enable-ssh",

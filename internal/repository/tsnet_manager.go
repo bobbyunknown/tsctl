@@ -237,6 +237,67 @@ func (t *TsnetManager) FunnelReset() error {
 	return t.ServeReset()
 }
 
+func (t *TsnetManager) ServeStop(port int) error {
+	ctx := context.Background()
+	config, err := t.getServeConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if config == nil || config.TCP == nil {
+		return nil
+	}
+
+	port16 := uint16(port)
+	if _, exists := config.TCP[port16]; exists {
+		delete(config.TCP, port16)
+		logger.Log.WithField("port", port).Info("stopped serve on port")
+		return t.setServeConfig(ctx, config)
+	}
+	return nil
+}
+
+func (t *TsnetManager) FunnelStop(port int) error {
+	ctx := context.Background()
+	config, err := t.getServeConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if config == nil || config.Web == nil {
+		return nil
+	}
+
+	status, err := t.getStatus(ctx)
+	if err != nil {
+		return err
+	}
+	dnsName := strings.TrimSuffix(status.Self.DNSName, ".")
+	portKey443 := ipn.HostPort(fmt.Sprintf("%s:443", dnsName))
+
+	if webCfg, exists := config.Web[portKey443]; exists {
+		// remove handler for this port
+		targetProxy := fmt.Sprintf("http://127.0.0.1:%d", port)
+		modified := false
+		for path, handler := range webCfg.Handlers {
+			if handler.Proxy == targetProxy {
+				delete(webCfg.Handlers, path)
+				modified = true
+			}
+		}
+
+		if modified {
+			if len(webCfg.Handlers) == 0 {
+				delete(config.Web, portKey443)
+				if config.AllowFunnel != nil {
+					delete(config.AllowFunnel, portKey443)
+				}
+			}
+			logger.Log.WithField("port", port).Info("stopped funnel on port")
+			return t.setServeConfig(ctx, config)
+		}
+	}
+	return nil
+}
+
 func (t *TsnetManager) EnableSSH() error {
 	ctx := context.Background()
 	lc, err := t.server.LocalClient()

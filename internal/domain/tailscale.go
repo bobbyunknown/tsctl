@@ -13,6 +13,8 @@ type TailscaleService interface {
 	FunnelStatus() (string, error)
 	ServeReset() error
 	FunnelReset() error
+	ServeStop(port int) error
+	FunnelStop(port int) error
 	EnableSSH() error
 	Status() (string, error)
 	GetFullStatus(ctx context.Context) (*ipnstate.Status, error)

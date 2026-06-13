@@ -158,6 +158,29 @@ func (h *Handler) ResetServe(ctx context.Context, input *struct{}) (*ResetServeO
 	}, nil
 }
 
+type StopServeInput struct {
+	Port int `path:"port"`
+}
+
+type StopServeOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StopServe(ctx context.Context, input *StopServeInput) (*StopServeOutput, error) {
+	err := h.tailscaleUC.StopServe(input.Port)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	status, _ := h.tailscaleUC.GetServeStatus()
+	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+	return &StopServeOutput{
+		Body: APIResponse{Success: true, Message: "serve stopped on port"},
+	}, nil
+}
+
 type ResetFunnelOutput struct {
 	Body APIResponse
 }
@@ -174,6 +197,29 @@ func (h *Handler) ResetFunnel(ctx context.Context, input *struct{}) (*ResetFunne
 	}
 	return &ResetFunnelOutput{
 		Body: APIResponse{Success: true, Message: "funnel config reset"},
+	}, nil
+}
+
+type StopFunnelInput struct {
+	Port int `path:"port"`
+}
+
+type StopFunnelOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StopFunnel(ctx context.Context, input *StopFunnelInput) (*StopFunnelOutput, error) {
+	err := h.tailscaleUC.StopFunnel(input.Port)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	status, _ := h.tailscaleUC.GetServeStatus()
+	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+	return &StopFunnelOutput{
+		Body: APIResponse{Success: true, Message: "funnel stopped on port"},
 	}, nil
 }
 

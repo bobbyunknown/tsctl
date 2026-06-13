@@ -78,7 +78,7 @@ func (p *PortProxyManager) startOne(port int) error {
 		cancel:    cancel,
 		port:      port,
 		status:    "active",
-		localAddr: fmt.Sprintf("127.0.0.1:%d", port),
+		localAddr: fmt.Sprintf("localhost:%d", port),
 		tsnetAddr: ln.Addr().String(),
 	}
 
@@ -113,7 +113,7 @@ func (p *PortProxyManager) acceptLoop(ctx context.Context, ln net.Listener, port
 func (p *PortProxyManager) handleConn(_ context.Context, tsConn net.Conn, port int, proxy *portProxy) {
 	defer func() { _ = tsConn.Close() }()
 
-	localConn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
+	localConn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), 5*time.Second)
 	if err != nil {
 		logger.Log.WithError(err).WithField("port", port).Warn("failed to connect to local port")
 		return
