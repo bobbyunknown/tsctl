@@ -10,6 +10,7 @@ type Config struct {
 	Tailscale TailscaleConfig `yaml:"tailscale"`
 	Logging   LoggingConfig   `yaml:"logging"`
 	Server    ServerConfig    `yaml:"server"`
+	Proxy     ProxyConfig     `yaml:"proxy"`
 }
 
 type TailscaleConfig struct {
@@ -31,13 +32,19 @@ type ServerConfig struct {
 	Mode string `yaml:"mode"`
 }
 
+type ProxyConfig struct {
+	Mode         string `yaml:"mode"`
+	Port         int    `yaml:"port,omitempty"`
+	Ports        []int  `yaml:"ports,omitempty"`
+	ScanInterval int    `yaml:"scan_interval"`
+	ExcludePorts []int  `yaml:"exclude_ports,omitempty"`
+}
+
 var (
-	cfg        *Config
-	configPath string
+	cfg *Config
 )
 
 func Load(path string) (*Config, error) {
-	configPath = path
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -50,19 +57,6 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
-}
-
-func Save() error {
-	if cfg == nil || configPath == "" {
-		return nil
-	}
-
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, data, 0644)
 }
 
 func Get() *Config {
