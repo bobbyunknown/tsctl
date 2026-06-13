@@ -57,8 +57,8 @@ export default function Navbar() {
                         </div>
                     </div>
                     <div className="flex flex-col justify-center">
-                        <span className="font-bold text-lg tracking-wider text-cyan-glow display-font leading-none uppercase">TSCTL</span>
-                        <span className="text-[10px] tracking-[0.2em] text-muted-foreground uppercase mt-0.5">Control Plane</span>
+                        <span className="font-black text-xl tracking-[0.1em] text-nexus-glow logo-font leading-none uppercase">TSCTL</span>
+                        <span className="text-[10px] tracking-[0.2em] text-muted-foreground uppercase mt-0.5 opacity-80">Control Plane</span>
                     </div>
                 </Link>
 

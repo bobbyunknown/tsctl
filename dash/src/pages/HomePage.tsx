@@ -206,12 +206,12 @@ export default function HomePage() {
             <div className="max-w-6xl mx-auto space-y-6 px-4">
                 
                 {/* PAGE HEADER */}
-                <header className="flex flex-col gap-3 border-b border-[#02d7f2]/15 pb-6 mb-8">
+                <header className="flex flex-col gap-4 border-b border-[#02d7f2]/15 pb-8 mb-8 mt-4">
                     <div className="flex items-center gap-4">
-                        <Activity className="w-8 h-8 text-[#02d7f2]" />
-                        <h1 className="text-3xl display-font font-bold tracking-widest text-cyan-glow">DASHBOARD</h1>
+                        <Activity className="w-10 h-10 text-[#02d7f2]" style={{ filter: 'drop-shadow(0 0 10px #02d7f2)' }} />
+                        <h1 className="text-5xl display-font font-bold tracking-[0.15em] text-white uppercase">DASHBOARD</h1>
                     </div>
-                    <p className="text-muted-foreground text-sm max-w-2xl leading-relaxed">
+                    <p className="font-mono text-zinc-400 text-sm max-w-3xl leading-relaxed tracking-wide opacity-80">
                         Control your Tailscale node configuration, expose local ports via proxy, and manage public internet access points (Funnel) directly from this terminal.
                     </p>
                 </header>

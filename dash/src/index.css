@@ -64,6 +64,10 @@
     font-family: 'Orbitron', sans-serif;
   }
 
+  .logo-font {
+    font-family: 'Michroma', sans-serif;
+  }
+
   * {
     border-color: hsl(var(--border));
   }
@@ -83,6 +87,25 @@
   .text-cyan-glow {
     color: #02d7f2;
     text-shadow: 0 0 10px rgba(2, 215, 242, 0.5);
+  }
+  
+  .text-cyan-neon {
+    color: #02d7f2;
+    text-shadow: 0 0 5px #02d7f2, 0 0 15px rgba(2, 215, 242, 0.8), 0 0 30px rgba(2, 215, 242, 0.5);
+  }
+
+  .text-nexus-glow {
+    color: #02d7f2;
+    text-shadow: 
+      0 0 2px #02d7f2,
+      0 0 5px #02d7f2,
+      0 0 12px rgba(2, 215, 242, 1),
+      0 0 22px rgba(2, 215, 242, 0.8);
+  }
+
+  .text-lime-neon {
+    color: #39ff14;
+    text-shadow: 0 0 5px #39ff14, 0 0 15px rgba(57, 255, 20, 0.8), 0 0 30px rgba(57, 255, 20, 0.5);
   }
   
   .border-thin-cyan {
