@@ -34,6 +34,10 @@ func NewTsnetManager(cfg *config.Config) *TsnetManager {
 	}
 }
 
+func (t *TsnetManager) GetServer() *tsnet.Server {
+	return t.server
+}
+
 func (t *TsnetManager) Start(ctx context.Context) error {
 	logger.Log.Info("starting embedded tailscale daemon")
 

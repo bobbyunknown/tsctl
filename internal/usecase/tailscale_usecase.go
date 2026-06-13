@@ -68,17 +68,17 @@ func (u *TailscaleUseCase) EnableSSH() error {
 	return u.service.EnableSSH()
 }
 
-func (u *TailscaleUseCase) GetStatus() (*StatusResponse, error) {
+func (u *TailscaleUseCase) GetStatus() (interface{}, error) {
 	jsonStr, err := u.service.Status()
 	if err != nil {
 		return nil, err
 	}
 
-	var status StatusResponse
+	var status map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &status); err != nil {
 		return nil, err
 	}
-	return &status, nil
+	return status, nil
 }
 
 func (u *TailscaleUseCase) GetAuthStatus() (map[string]interface{}, error) {

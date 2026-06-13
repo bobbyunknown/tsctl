@@ -36,13 +36,3 @@ func Init(logPath string, level string, format string) error {
 
 	return nil
 }
-
-func GetDaemonLogger(logPath string) (*lumberjack.Logger, error) {
-	return &lumberjack.Logger{
-		Filename:   logPath,
-		MaxSize:    10,
-		MaxBackups: 3,
-		MaxAge:     7,
-		Compress:   true,
-	}, nil
-}

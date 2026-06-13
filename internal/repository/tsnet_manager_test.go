@@ -10,7 +10,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	logger.Init(os.DevNull, "error", "json")
+	_ = logger.Init(os.DevNull, "error", "json")
 	os.Exit(m.Run())
 }
 
@@ -56,7 +56,7 @@ func TestTsnetManager_StartStop(t *testing.T) {
 	if err != nil {
 		t.Skipf("cannot start tsnet (needs tailscale backend): %v", err)
 	}
-	defer mgr.Stop()
+	defer func() { _ = mgr.Stop() }()
 
 	status, err := mgr.Status()
 	if err != nil {
