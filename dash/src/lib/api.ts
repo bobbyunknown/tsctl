@@ -46,8 +46,12 @@ export interface ServeStatus {
 
 export interface ProxyInfo {
     port: number
-    ip: string
-    protocol: string
+    status: string
+    local_addr: string
+    tsnet_addr: string
+    bytes_in?: number
+    bytes_out?: number
+    conn_count?: number
 }
 
 export interface ProxyStartRequest {
@@ -80,6 +84,10 @@ export const serveApi = {
         const { data } = await api.post<ApiResponse>('/api/v1/serve', { port, background })
         return data
     },
+    stop: async (port: number) => {
+        const { data } = await api.delete<ApiResponse>(`/api/v1/serve/${port}`)
+        return data
+    },
     getStatus: async (): Promise<ServeStatus> => {
         const { data } = await api.get<ApiResponse<ServeStatus>>('/api/v1/serve/status')
         return data.data!
@@ -93,6 +101,10 @@ export const serveApi = {
 export const funnelApi = {
     start: async (port: number, background: boolean = false) => {
         const { data } = await api.post<ApiResponse>('/api/v1/funnel', { port, background })
+        return data
+    },
+    stop: async (port: number) => {
+        const { data } = await api.delete<ApiResponse>(`/api/v1/funnel/${port}`)
         return data
     },
     getStatus: async (): Promise<ServeStatus> => {
