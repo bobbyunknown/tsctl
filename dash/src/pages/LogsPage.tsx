@@ -4,11 +4,13 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { RefreshCcw, TerminalSquare, Trash2 } from 'lucide-react'
 import { logsApi } from '@/lib/api'
+import { useConfirm } from '@/contexts/ConfirmContext'
 
 export default function LogsPage() {
     const [logs, setLogs] = useState<string[]>([])
     const [lines, setLines] = useState('100')
     const [loading, setLoading] = useState(false)
+    const { confirm } = useConfirm()
 
     const fetchLogs = async () => {
         setLoading(true)
@@ -24,7 +26,14 @@ export default function LogsPage() {
     }
 
     const handleClearLogs = async () => {
-        if (!window.confirm('Are you sure you want to clear all logs?')) return
+        const isConfirmed = await confirm({
+            title: 'Clear Logs',
+            description: 'Are you sure you want to clear all logs? This action cannot be undone.',
+            confirmText: 'Clear',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
 
         try {
             await logsApi.clearLogs()

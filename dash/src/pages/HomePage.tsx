@@ -1,95 +1,52 @@
-import { useState, useEffect } from 'react'
-import { serveApi, funnelApi, sshApi, proxyApi } from '../lib/api'
+import { useEffect, useState } from 'react'
+import { serveApi, funnelApi, proxyApi } from '../lib/api'
 import type { ProxyInfo } from '../lib/api'
 import { useTailscaleWS } from '../hooks/useWebSocket'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { ExposureControls } from '../components/ExposureControls'
+import { useConfirm } from '@/contexts/ConfirmContext'
 import { toast } from 'sonner'
 import {
     ArrowRight,
     ShieldAlert,
-    Terminal,
-    Zap,
-    Globe,
-    Server,
-    Network,
-    Cpu,
-    Lock,
-    Wifi,
-    Calendar,
-    Users,
-    ExternalLink,
     Copy,
+    ExternalLink,
+    Wifi,
+    Cpu,
+    Network,
+    Server,
     Activity,
-    X,
+    X
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-
-
-const InfoCard = ({
-    label,
-    value,
-    subtext,
-    icon: Icon,
-    active = false,
-    variant = 'default',
-    accentColor = "text-violet-500"
-}: {
-    label: string
-    value: string
-    subtext: string
-    icon: any
-    active?: boolean
-    variant?: 'default' | 'mono'
-    accentColor?: string
-}) => (
-    <Card className="relative p-6 bg-card/50 backdrop-blur-sm border-border/60 hover:border-primary/30 card-hover-effect overflow-hidden group">
-        {/* Inner Top Highlight */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent opacity-50" />
-
-        <div className="flex justify-between items-start mb-4">
-            <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">{label}</span>
-            <Icon className={cn("w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity", accentColor)} />
-        </div>
-
-        <div className="space-y-1">
-            <div className={cn(
-                "text-2xl font-semibold tracking-tight text-foreground break-all",
-                variant === 'mono' && "font-mono text-xl"
-            )}>
-                {value}
-            </div>
-            <div className="text-xs font-medium text-muted-foreground flex items-center gap-2">
-                {subtext}
-                {active && (
-                    <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                )}
-            </div>
-        </div>
-    </Card>
-)
 
 export default function HomePage() {
     const { authStatus, serveStatus } = useTailscaleWS()
-    const [servePort, setServePort] = useState('8080')
-    const [funnelPort, setFunnelPort] = useState('443')
-    const [proxyPort, setProxyPort] = useState('3000')
-    const [loading, setLoading] = useState(false)
+    const { confirm } = useConfirm()
     const [activeServices, setActiveServices] = useState<any>(null)
     const [proxies, setProxies] = useState<ProxyInfo[]>([])
 
-    useEffect(() => {
-        const fetchInitial = async () => {
-            try {
-                const data = await serveApi.getStatus()
-                setActiveServices(data)
-            } catch (error) {
-                console.error('Failed to fetch initial services:', error)
-            }
+    const fetchInitial = async () => {
+        try {
+            const data = await serveApi.getStatus()
+            setActiveServices(data)
+        } catch (error) {
+            console.error('Failed to fetch initial services:', error)
         }
+    }
+
+    const fetchProxies = async () => {
+        try {
+            const proxyData = await proxyApi.getStatus()
+            setProxies(proxyData || [])
+        } catch (error) {
+            console.error('Failed to fetch proxy status:', error)
+        }
+    }
+
+    useEffect(() => {
         fetchInitial()
+        fetchProxies()
+        const interval = setInterval(fetchProxies, 5000)
+        return () => clearInterval(interval)
     }, [])
 
     useEffect(() => {
@@ -98,410 +55,487 @@ export default function HomePage() {
         }
     }, [serveStatus])
 
-    useEffect(() => {
-        const fetchProxies = async () => {
-            try {
-                const proxyData = await proxyApi.getStatus()
-                setProxies(proxyData || [])
-            } catch (error) {
-                console.error('Failed to fetch proxy status:', error)
-            }
-        }
-        fetchProxies()
-        const interval = setInterval(fetchProxies, 5000)
-        return () => clearInterval(interval)
-    }, [])
-
-    const handleServeStart = async () => {
-        setLoading(true)
+    const handleResetServe = async () => {
+        const isConfirmed = await confirm({
+            title: 'Stop Serves',
+            description: 'Are you sure you want to stop all serve routes?',
+            confirmText: 'Stop All',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
         try {
-            await serveApi.start(Number(servePort), false)
-            toast.success('Serve started')
+            await serveApi.reset()
+            toast.success('All serve routes stopped')
+            const data = await serveApi.getStatus()
+            setActiveServices(data)
         } catch (error: any) {
-            toast.error(error.message)
+            toast.error(error.message || 'Failed to reset serve')
         }
-        setLoading(false)
     }
 
-    const handleFunnelStart = async () => {
-        setLoading(true)
+    const handleResetFunnel = async () => {
+        const isConfirmed = await confirm({
+            title: 'Stop Funnels',
+            description: 'Are you sure you want to stop all funnel routes?',
+            confirmText: 'Stop All',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
         try {
-            await funnelApi.start(Number(funnelPort), false)
-            toast.success('Funnel started')
+            await funnelApi.reset()
+            toast.success('All funnel routes stopped')
+            const data = await serveApi.getStatus()
+            setActiveServices(data)
         } catch (error: any) {
-            toast.error(error.message)
+            toast.error(error.message || 'Failed to reset funnel')
         }
-        setLoading(false)
     }
 
-    const handleSSHEnable = async () => {
-        setLoading(true)
+    const handleStopServe = async (port: number) => {
+        const isConfirmed = await confirm({
+            title: 'Stop Serve',
+            description: `Are you sure you want to stop the serve route on port ${port}?`,
+            confirmText: 'Stop',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
         try {
-            await sshApi.enable()
-            toast.success('SSH access enabled')
+            await serveApi.stop(port)
+            toast.success(`Serve on port ${port} stopped`)
+            const data = await serveApi.getStatus()
+            setActiveServices(data)
         } catch (error: any) {
-            toast.error(error.message)
+            toast.error(error.message || 'Failed to stop serve')
         }
-        setLoading(false)
     }
 
-    const handleProxyStart = async () => {
-        if (!proxyPort) return
-        setLoading(true)
+    const handleStopFunnel = async (port: number) => {
+        const isConfirmed = await confirm({
+            title: 'Stop Funnel',
+            description: `Are you sure you want to stop the funnel route on port ${port}?`,
+            confirmText: 'Stop',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
         try {
-            await proxyApi.start({ mode: 'single', port: Number(proxyPort) })
-            toast.success('Proxy started')
-            const proxyData = await proxyApi.getStatus()
-            setProxies(proxyData || [])
+            await funnelApi.stop(port)
+            toast.success(`Funnel on port ${port} stopped`)
+            const data = await serveApi.getStatus()
+            setActiveServices(data)
         } catch (error: any) {
-            toast.error(error.message || 'Failed to start proxy')
+            toast.error(error.message || 'Failed to stop funnel')
         }
-        setLoading(false)
     }
 
     const handleProxyStop = async (port: number) => {
-        setLoading(true)
+        const isConfirmed = await confirm({
+            title: 'Stop Proxy',
+            description: `Are you sure you want to stop the proxy on port ${port}?`,
+            confirmText: 'Stop',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
         try {
             await proxyApi.stop([port])
             toast.success(`Proxy stopped for port ${port}`)
-            const proxyData = await proxyApi.getStatus()
-            setProxies(proxyData || [])
+            fetchProxies()
         } catch (error: any) {
             toast.error(error.message || 'Failed to stop proxy')
         }
-        setLoading(false)
     }
 
     const handleProxyStopAll = async () => {
-        setLoading(true)
+        const isConfirmed = await confirm({
+            title: 'Stop Proxies',
+            description: 'Are you sure you want to stop all active proxies?',
+            confirmText: 'Stop All',
+            cancelText: 'Cancel',
+            isDestructive: true
+        })
+        if (!isConfirmed) return
         try {
             await proxyApi.stopAll()
             toast.success('All proxies stopped')
-            const proxyData = await proxyApi.getStatus()
-            setProxies(proxyData || [])
+            fetchProxies()
         } catch (error: any) {
             toast.error(error.message || 'Failed to stop proxies')
         }
-        setLoading(false)
     }
 
-    return (
-        <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in py-8">
-
-            <header className="flex flex-col gap-2">
-                <div className="flex items-center gap-3">
-                    <h1 className="text-3xl font-semibold tracking-tight text-foreground">Network Overview</h1>
-                    <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider py-0.5 h-6 bg-background/50 backdrop-blur border-border/50 text-muted-foreground">
-                        {authStatus?.authenticated ? 'Live' : 'Offline'}
-                    </Badge>
+    if (!authStatus) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[65vh] gap-6">
+                <div className="relative w-14 h-14">
+                    <div className="absolute inset-0 bg-[#02d7f2] rounded-full blur-md opacity-30 animate-pulse"></div>
+                    <svg className="w-full h-full animate-[spin_2.5s_linear_infinite]" viewBox="0 0 100 100">
+                        <circle 
+                            cx="50" cy="50" r="40" 
+                            stroke="rgba(2, 215, 242, 0.15)" 
+                            strokeWidth="4" 
+                            fill="none" 
+                        />
+                        <circle 
+                            cx="50" cy="50" r="40" 
+                            stroke="#02d7f2" 
+                            strokeWidth="4" 
+                            strokeDasharray="60 180" 
+                            strokeLinecap="round"
+                            fill="none" 
+                            style={{ filter: 'drop-shadow(0 0 5px #02d7f2)' }}
+                        />
+                    </svg>
                 </div>
-                <p className="text-sm text-muted-foreground max-w-2xl leading-relaxed">
-                    Manage local node connectivity configuration, traffic routing, and system access controls.
-                </p>
-            </header>
+                <div className="text-center font-mono tracking-[0.2em] text-[10px] text-cyan-glow uppercase animate-pulse">
+                    Initializing control plane...
+                </div>
+            </div>
+        )
+    }
 
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <InfoCard
-                    label="Context"
-                    value={authStatus?.authenticated ? 'Connected' : 'Disconnected'}
-                    subtext="NODE_STATE"
-                    icon={Wifi}
-                    active={authStatus?.authenticated}
-                    accentColor={authStatus?.authenticated ? 'text-emerald-500' : 'text-amber-500'}
-                />
-                <InfoCard
-                    label="Backend"
-                    value={authStatus?.backend_state || 'Idle'}
-                    subtext="DAEMON_PROCESS"
-                    icon={Cpu}
-                    active={authStatus?.backend_state === 'Running'}
-                    accentColor="text-violet-500"
-                />
-                <InfoCard
-                    label="Address"
-                    value={authStatus?.ips?.[0] || '---.---.---.---'}
-                    subtext="TS_IPV4"
-                    icon={Network}
-                    variant="mono"
-                    accentColor="text-blue-500"
-                />
-            </section>
+    const isConnected = authStatus.authenticated
+    const serves = activeServices?.services?.filter((s: any) => s.type === 'serve') || []
+    const funnels = activeServices?.services?.filter((s: any) => s.type === 'funnel') || []
 
-            {authStatus && !authStatus.authenticated && authStatus.auth_url && (
-                <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-amber-500/5 p-8 flex flex-col sm:flex-row items-center justify-between gap-6 card-hover-effect">
-                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 to-transparent opacity-50" />
+    return (
+        <div className="pb-10 text-foreground font-sans">
+            <div className="max-w-6xl mx-auto space-y-6 px-4">
+                
+                {/* PAGE HEADER */}
+                <header className="flex flex-col gap-3 border-b border-[#02d7f2]/15 pb-6 mb-8">
+                    <div className="flex items-center gap-4">
+                        <Activity className="w-8 h-8 text-[#02d7f2]" />
+                        <h1 className="text-3xl display-font font-bold tracking-widest text-cyan-glow">DASHBOARD</h1>
+                    </div>
+                    <p className="text-muted-foreground text-sm max-w-2xl leading-relaxed">
+                        Control your Tailscale node configuration, expose local ports via proxy, and manage public internet access points (Funnel) directly from this terminal.
+                    </p>
+                </header>
 
-                    <div className="relative z-10 flex items-start gap-4">
-                        <div className="p-3 rounded-xl bg-amber-500/10 text-amber-500 shrink-0 border border-amber-500/20 shadow-lg shadow-amber-500/10">
-                            <ShieldAlert className="w-6 h-6" />
+                {/* TELEMETRY HEADER */}
+                <div className="bg-card-defi border border-[#02d7f2]/15 rounded flex flex-col md:flex-row divide-y md:divide-y-0 md:divide-x divide-[rgba(0,255,255,0.15)] shadow-lg overflow-hidden">
+                    <div className="flex-1 p-5 flex flex-col justify-between hover:bg-[rgba(2,215,242,0.02)] transition-colors">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Connection</span>
+                            <Wifi className={`w-4 h-4 ${isConnected ? "text-[#39ff14]" : "text-[#ff00ff]"}`} />
                         </div>
-                        <div className="space-y-1">
-                            <h3 className="text-lg font-semibold text-amber-500">Authentication Required</h3>
-                            <p className="text-sm text-muted-foreground max-w-md">
-                                This node must be authenticated to join the tailnet and enable routing features.
-                            </p>
+                        <div className={`text-lg font-bold display-font tracking-widest ${isConnected ? "text-[#39ff14]" : "text-muted-foreground"}`}>
+                            {isConnected ? 'CONNECTED' : 'DISCONNECTED'}
                         </div>
                     </div>
-                    <Button
-                        onClick={() => window.open(authStatus.auth_url, '_blank')}
-                        className="relative z-10 bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-lg shadow-amber-500/20 h-10 px-6 font-medium"
-                    >
-                        Authenticate <ArrowRight className="ml-2 w-4 h-4" />
-                    </Button>
+
+                    <div className="flex-1 p-5 flex flex-col justify-between hover:bg-[rgba(2,215,242,0.02)] transition-colors">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Daemon Status</span>
+                            <Cpu className="w-4 h-4 text-[#007aff]" />
+                        </div>
+                        <div className="text-lg font-bold display-font tracking-widest text-[#007aff] uppercase">
+                            {authStatus?.backend_state ? authStatus.backend_state : 'IDLE'}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 p-5 flex flex-col justify-between hover:bg-[rgba(2,215,242,0.02)] transition-colors">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">IPv4 Address</span>
+                            <Network className="w-4 h-4 text-[#02d7f2]" />
+                        </div>
+                        <div className="text-lg font-bold display-font tracking-widest text-[#02d7f2]">
+                            {authStatus?.ips?.[0] || '---.---.---.---'}
+                        </div>
+                    </div>
                 </div>
-            )}
 
-            {authStatus?.authenticated && (
-                <section className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <Card className="p-6 bg-card/50 backdrop-blur-sm border-border/60 space-y-4">
-                        <h3 className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Tailnet Information</h3>
-                        <div className="space-y-3">
-                            <div className="flex items-start justify-between">
-                                <span className="text-xs text-muted-foreground">Network</span>
-                                <span className="text-sm font-mono text-foreground">{authStatus.tailnet_name || 'Unknown'}</span>
-                            </div>
-                            <div className="flex items-start justify-between">
-                                <span className="text-xs text-muted-foreground">DNS Suffix</span>
-                                <span className="text-sm font-mono text-foreground">{authStatus.tailnet_dns_suffix || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-start justify-between">
-                                <span className="text-xs text-muted-foreground">Hostname</span>
-                                <span className="text-sm font-mono text-foreground">{authStatus.hostname || 'N/A'}</span>
+                {/* AUTHENTICATION REQUIRED BLOCK */}
+                {authStatus && !authStatus.authenticated && authStatus.auth_url && (
+                    <div className="bg-card-defi border border-[#ff00ff]/50 rounded p-6 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-[0_0_20px_rgba(0,122,255,0.15)] relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#ff00ff]/5 to-transparent animate-pulse"></div>
+                        <div className="flex items-start gap-4 relative z-10">
+                            <ShieldAlert className="w-8 h-8 text-[#ff00ff] shrink-0 mt-1" />
+                            <div className="space-y-1">
+                                <h3 className="text-lg font-bold display-font tracking-widest text-[#ff00ff]">AUTH REQUIRED</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Node is currently isolated. Connect your identity to join the tailnet.
+                                </p>
                             </div>
                         </div>
-                    </Card>
+                        <button
+                            onClick={() => window.open(authStatus.auth_url, '_blank')}
+                            className="gradient-btn px-6 py-3 rounded flex items-center justify-center gap-2 relative z-10 w-full sm:w-auto"
+                        >
+                            CONNECT NOW <ArrowRight className="w-5 h-5" />
+                        </button>
+                    </div>
+                )}
 
-                    <Card className="p-6 bg-card/50 backdrop-blur-sm border-border/60 space-y-4">
-                        <h3 className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Network Stats</h3>
-                        <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                    <Users className="w-3.5 h-3.5" />
-                                    Peers
-                                </div>
-                                <span className="text-lg font-bold text-foreground">{authStatus.peer_count || 0}</span>
-                            </div>
-                            {authStatus.created_at && (
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <Calendar className="w-3.5 h-3.5" />
-                                        Created
-                                    </div>
-                                    <span className="text-xs font-mono text-foreground">
-                                        {new Date(authStatus.created_at).toLocaleDateString()}
-                                    </span>
-                                </div>
-                            )}
-                            {authStatus.key_expiry && (
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                        <Lock className="w-3.5 h-3.5" />
-                                        Key Expiry
-                                    </div>
-                                    <span className="text-xs font-mono text-foreground">
-                                        {new Date(authStatus.key_expiry).toLocaleDateString()}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-                </section>
-            )}
+                {/* MAIN GRID */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    {/* LEFT COLUMN: Controls & Services */}
+                    <div className="lg:col-span-8 space-y-6">
+                        
+                        <ExposureControls onSuccess={() => { fetchInitial(); fetchProxies(); }} />
+                    </div>
 
-            {authStatus?.authenticated && activeServices?.services && activeServices.services.length > 0 && (
-                <Card className="p-6 bg-card/50 backdrop-blur-sm border-border/60 space-y-4">
-                    <h3 className="text-xs font-bold tracking-widest text-muted-foreground uppercase flex items-center gap-2">
-                        <Server className="w-3.5 h-3.5" />
-                        Active Services
-                    </h3>
-                    <div className="space-y-2">
-                        {activeServices.services.map((service: any) => {
-                            const cleanUrl = service.public_url?.replace(/\.+$/, '')
-                            return (
-                                <div key={service.port} className="flex items-center justify-between p-3 rounded-lg bg-secondary/40 border border-border/50">
-                                    <div className="flex flex-col gap-1 flex-1 min-w-0">
-                                        <div className="flex items-center gap-3">
-                                            <Badge variant={service.type === 'funnel' ? "default" : "secondary"} className="text-[10px] font-mono">
-                                                {service.type.toUpperCase()}
-                                            </Badge>
-                                            <span className="text-sm font-mono text-foreground">Port {service.port}</span>
+                    {/* RIGHT COLUMN: Network Info */}
+                    <div className="lg:col-span-4 space-y-6">
+                        {isConnected && (
+                            <div className="bg-card-defi border border-[#02d7f2]/15 rounded overflow-hidden shadow-lg h-full flex flex-col">
+                                <div className="border-b border-[#02d7f2]/15 bg-black/40 px-5 py-4">
+                                    <span className="text-sm font-bold tracking-widest text-cyan-glow display-font">NETWORK INFO</span>
+                                </div>
+                                <div className="p-5 space-y-6 flex-1 bg-black/20">
+                                    
+                                    <div className="space-y-1">
+                                        <div className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Tailnet Domain</div>
+                                        <div className="text-sm text-[#02d7f2] break-all">{authStatus.tailnet_name || 'UNKNOWN_NET'}</div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <div className="text-xs font-bold tracking-widest text-muted-foreground uppercase">DNS Suffix</div>
+                                        <div className="text-sm text-[#02d7f2] break-all">{authStatus.tailnet_dns_suffix || 'N/A'}</div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <div className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Host ID</div>
+                                        <div className="text-sm text-[#02d7f2]">{authStatus.hostname || 'N/A'}</div>
+                                    </div>
+
+                                    <div className="mt-6 pt-6 border-t border-[#02d7f2]/15 space-y-5">
+                                        <div className="space-y-1">
+                                            <div className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Peers Linked</div>
+                                            <div className="text-lg font-bold display-font text-[#007aff]">{authStatus.peer_count || 0}</div>
                                         </div>
-                                        {cleanUrl && (
-                                            <div className="flex items-center gap-2 ml-16">
-                                                <span className="text-xs font-mono text-muted-foreground truncate">{cleanUrl}</span>
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="h-5 w-5 p-0"
-                                                    onClick={() => {
-                                                        navigator.clipboard.writeText(cleanUrl)
-                                                        toast.success('URL copied')
-                                                    }}
-                                                >
-                                                    <Copy className="w-3 h-3" />
-                                                </Button>
+                                        {authStatus.key_expiry && (
+                                            <div className="space-y-1">
+                                                <div className="text-xs font-bold tracking-widest text-muted-foreground uppercase">Key Expiry</div>
+                                                <div className="text-sm font-bold text-[#39ff14] display-font">
+                                                    {new Date(authStatus.key_expiry).toLocaleDateString()}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
-                                    {cleanUrl && (
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-7 gap-1.5 text-xs"
-                                            onClick={() => window.open(cleanUrl, '_blank')}
-                                        >
-                                            Open
-                                            <ExternalLink className="w-3 h-3" />
-                                        </Button>
-                                    )}
-                                </div>
-                            )
-                        })}
-                    </div>
-                </Card>
-            )}
-
-            <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                <section className="space-y-6 h-full flex flex-col">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Globe className="w-4 h-4 text-violet-500" />
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">Exposure Configuration</h2>
-                    </div>
-
-                    <div className="space-y-4">
-                        <Card className="group p-5 bg-card/50 backdrop-blur-sm border-border/60 hover:border-violet-500/50 hover:shadow-[0_0_20px_-10px_rgba(139,92,246,0.3)]">
-                            <div className="flex items-center gap-4">
-                                <div className="p-2.5 rounded-lg bg-violet-500/10 text-violet-500 group-hover:scale-105 transition-transform">
-                                    <Zap className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-sm text-violet-500 group-hover:text-violet-400">Serve</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Local traffic exposure</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Input
-                                        placeholder="8080"
-                                        value={servePort}
-                                        onChange={(e) => setServePort(e.target.value)}
-                                        className="w-20 font-mono text-center h-9 bg-background/50 focus-visible:border-violet-500/50 focus-visible:ring-violet-500/30"
-                                    />
-                                    <Button onClick={handleServeStart} disabled={loading} className="h-9 bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20">
-                                        Start
-                                    </Button>
+                                    
                                 </div>
                             </div>
-                        </Card>
-
-                        <Card className="group p-5 bg-card/50 backdrop-blur-sm border-border/60 hover:border-violet-500/50 hover:shadow-[0_0_20px_-10px_rgba(139,92,246,0.3)]">
-                            <div className="flex items-center gap-4">
-                                <div className="p-2.5 rounded-lg bg-violet-500/10 text-violet-500 group-hover:scale-105 transition-transform">
-                                    <Globe className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-sm text-violet-500 group-hover:text-violet-400">Funnel</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Public internet access</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Input
-                                        placeholder="443"
-                                        value={funnelPort}
-                                        onChange={(e) => setFunnelPort(e.target.value)}
-                                        className="w-20 font-mono text-center h-9 bg-background/50 focus-visible:border-violet-500/50 focus-visible:ring-violet-500/30"
-                                    />
-                                    <Button onClick={handleFunnelStart} disabled={loading} className="h-9 bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-500/20">
-                                        Start
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
-                    </div>
-                </section>
-
-                <div className="space-y-6 flex flex-col h-full">
-                    <section className="space-y-6 flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                            <Lock className="w-4 h-4 text-emerald-500" />
-                            <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">System Access & Proxies</h2>
-                        </div>
-
-                    <div className="space-y-4">
-                        <Card className="group p-5 bg-card/50 backdrop-blur-sm border-border/60 hover:border-emerald-500/30">
-                            <div className="flex items-center gap-4">
-                                <div className="p-2.5 rounded-lg bg-secondary text-foreground group-hover:bg-emerald-500/10 group-hover:text-emerald-500 transition-colors">
-                                    <Terminal className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-sm">SSH Access</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Remote shell connections</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Input
-                                        placeholder="22"
-                                        disabled
-                                        className="w-20 font-mono text-center h-9 bg-background/50 opacity-50"
-                                    />
-                                    <Button onClick={handleSSHEnable} disabled={loading} className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
-                                        Enable
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
-
-                        <Card className="group p-5 bg-card/50 backdrop-blur-sm border-border/60 hover:border-blue-500/30">
-                            <div className="flex items-center gap-4">
-                                <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-500 group-hover:scale-105 transition-transform">
-                                    <Network className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="font-semibold text-sm text-blue-500">Local Proxy</h3>
-                                    <p className="text-xs text-muted-foreground mt-0.5">Expose ports</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Input
-                                        placeholder="3000"
-                                        value={proxyPort}
-                                        onChange={(e) => setProxyPort(e.target.value)}
-                                        className="w-20 font-mono text-center h-9 bg-background/50 focus-visible:border-blue-500/50 focus-visible:ring-blue-500/30"
-                                    />
-                                    <Button onClick={handleProxyStart} disabled={loading} className="h-9 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20">
-                                        Start
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
-
-                        {proxies.length > 0 && (
-                            <Card className="p-4 bg-card/50 border-border/60">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Proxies</span>
-                                    <Button size="sm" variant="ghost" onClick={handleProxyStopAll} className="h-6 px-2 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10">
-                                        Stop All
-                                    </Button>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    {proxies.map(p => (
-                                        <Badge key={p.port} variant="secondary" className="flex items-center gap-1.5 py-1 px-2">
-                                            <span className="font-mono text-xs">{p.port}</span>
-                                            <span className="text-[10px] text-muted-foreground opacity-70 uppercase">{p.protocol}</span>
-                                            <button 
-                                                onClick={() => handleProxyStop(p.port)}
-                                                className="ml-1 hover:text-red-500 transition-colors rounded-full hover:bg-background/50 p-0.5 focus:outline-none"
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </button>
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </Card>
                         )}
                     </div>
-                    </section>
+
                 </div>
 
+                {/* Unified Active Services Card (FULL WIDTH) */}
+                {isConnected && (serves.length > 0 || funnels.length > 0 || proxies.length > 0) && (
+                    <div className="bg-card-defi border border-[#02d7f2]/15 rounded overflow-hidden shadow-lg w-full">
+                        <div className="border-b border-[#02d7f2]/15 bg-black/40 px-5 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Server className="w-5 h-5 text-[#02d7f2]" />
+                                <span className="text-sm font-bold tracking-widest text-cyan-glow display-font">ACTIVE SERVICES</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                {serves.length > 0 && (
+                                    <button 
+                                        onClick={handleResetServe}
+                                        className="h-8 px-3 text-[10px] font-bold border border-[#ff1111] text-[#ff1111] hover:bg-[#ff1111] hover:text-black rounded transition-colors uppercase tracking-wider"
+                                    >
+                                        STOP ALL SERVES
+                                    </button>
+                                )}
+                                {funnels.length > 0 && (
+                                    <button 
+                                        onClick={handleResetFunnel}
+                                        className="h-8 px-3 text-[10px] font-bold border border-[#ff1111] text-[#ff1111] hover:bg-[#ff1111] hover:text-black rounded transition-colors uppercase tracking-wider"
+                                    >
+                                        STOP ALL FUNNELS
+                                    </button>
+                                )}
+                                {proxies.length > 0 && (
+                                    <button 
+                                        onClick={handleProxyStopAll}
+                                        className="h-8 px-3 text-[10px] font-bold border border-[#ff1111] text-[#ff1111] hover:bg-[#ff1111] hover:text-black rounded transition-colors uppercase tracking-wider"
+                                    >
+                                        STOP ALL PROXIES
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            {/* Render Serves */}
+                            {serves.map((service: any) => {
+                                const tailscaleIp = authStatus?.ips?.[0]
+                                const serveUrl = tailscaleIp ? `http://${tailscaleIp}:${service.port}` : service.local_url
+                                return (
+                                <div key={service.port} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-[#02d7f2]/15 rounded hover:border-[#02d7f2]/50 transition-all duration-200 bg-black/60 gap-4 shadow-[inset_0_0_10px_rgba(2,215,242,0.02)]">
+                                    <div className="flex items-center gap-4">
+                                        <div className="px-2.5 py-1 text-[10px] font-bold rounded border border-[#02d7f2]/30 text-[#02d7f2] bg-[#02d7f2]/5 tracking-widest font-mono uppercase">
+                                            SERVE
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-baseline gap-2">
+                                            <span className="text-lg font-bold display-font text-white tracking-wider">PORT {service.port}</span>
+                                            {serveUrl && (
+                                                <a 
+                                                    href={serveUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-[#02d7f2] font-mono select-all opacity-85 hover:opacity-100 hover:underline transition-opacity"
+                                                >
+                                                    ({tailscaleIp ? tailscaleIp : 'localhost'}:{service.port})
+                                                </a>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 sm:translate-y-1">
+                                        {serveUrl && (
+                                            <>
+                                                <button
+                                                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#02d7f2] hover:bg-[#02d7f2]/10 rounded border border-transparent hover:border-[#02d7f2]/20 transition-all duration-200"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(serveUrl)
+                                                        toast.success('Copied serve URL')
+                                                    }}
+                                                    title="Copy URL"
+                                                >
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#007aff] hover:bg-[#007aff]/10 rounded border border-transparent hover:border-[#007aff]/20 transition-all duration-200"
+                                                    onClick={() => window.open(serveUrl, '_blank')}
+                                                    title="Open Link"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                </button>
+                                            </>
+                                        )}
+                                        <button 
+                                            onClick={() => handleStopServe(service.port)}
+                                            className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#ff1111] hover:bg-[#ff1111]/10 rounded border border-transparent hover:border-[#ff1111]/20 transition-all duration-200"
+                                            title="Stop Serve"
+                                        >                                          <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            )})}
+
+                            {/* Render Funnels */}
+                            {funnels.map((service: any) => {
+                                const cleanUrl = service.public_url?.replace(/\.+$/, '')
+                                return (
+                                    <div key={service.port} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-[#02d7f2]/15 rounded hover:border-[#007aff]/50 transition-all duration-200 bg-black/60 gap-4 shadow-[inset_0_0_10px_rgba(0,122,255,0.02)]">
+                                        <div className="flex items-center gap-4">
+                                            <div className="px-2.5 py-1 text-[10px] font-bold rounded border border-[#007aff]/30 text-[#007aff] bg-[#007aff]/5 tracking-widest font-mono uppercase">
+                                                FUNNEL
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-2">
+                                                <span className="text-lg font-bold display-font text-white tracking-wider">PORT {service.port}</span>
+                                                {cleanUrl && (
+                                                    <a 
+                                                        href={cleanUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-[#02d7f2] font-mono select-all opacity-85 hover:opacity-100 hover:underline transition-opacity"
+                                                    >
+                                                        ({cleanUrl})
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 sm:translate-y-1">
+                                            {cleanUrl && (
+                                                <>
+                                                    <button
+                                                        className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#02d7f2] hover:bg-[#02d7f2]/10 rounded border border-transparent hover:border-[#02d7f2]/20 transition-all duration-200"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(cleanUrl)
+                                                            toast.success('Copied funnel URL')
+                                                        }}
+                                                        title="Copy URL"
+                                                    >
+                                                        <Copy className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#007aff] hover:bg-[#007aff]/10 rounded border border-transparent hover:border-[#007aff]/20 transition-all duration-200"
+                                                        onClick={() => window.open(cleanUrl, '_blank')}
+                                                        title="Open Link"
+                                                    >
+                                                        <ExternalLink className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button 
+                                                onClick={() => handleStopFunnel(service.port)}
+                                                className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#ff1111] hover:bg-[#ff1111]/10 rounded border border-transparent hover:border-[#ff1111]/20 transition-all duration-200"
+                                                title="Stop Funnel"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+
+                            {/* Render Proxies */}
+                            {proxies.map((p: any) => {
+                                const tailscaleIp = authStatus?.ips?.[0]
+                                const proxyUrl = tailscaleIp ? `http://${tailscaleIp}:${p.port}` : ''
+                                return (
+                                    <div key={p.port} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-[#02d7f2]/15 rounded hover:border-[#f2e900]/50 transition-all duration-200 bg-black/60 gap-4 shadow-[inset_0_0_10px_rgba(242,233,0,0.02)]">
+                                        <div className="flex items-center gap-4">
+                                            <div className="px-2.5 py-1 text-[10px] font-bold rounded border border-[#f2e900]/30 text-[#f2e900] bg-[#f2e900]/5 tracking-widest font-mono uppercase">
+                                                PROXY
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row sm:items-baseline gap-2">
+                                                <span className="text-lg font-bold display-font text-white tracking-wider">PORT {p.port}</span>
+                                                {tailscaleIp && (
+                                                    <a 
+                                                        href={proxyUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-[#02d7f2] font-mono select-all opacity-85 hover:opacity-100 hover:underline transition-opacity"
+                                                    >
+                                                        ({tailscaleIp}:{p.port})
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 sm:translate-y-1">
+                                            {tailscaleIp && (
+                                                <>
+                                                    <button
+                                                        className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#02d7f2] hover:bg-[#02d7f2]/10 rounded border border-transparent hover:border-[#02d7f2]/20 transition-all duration-200"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(proxyUrl)
+                                                            toast.success('Copied proxy URL')
+                                                        }}
+                                                        title="Copy Proxy URL"
+                                                    >
+                                                        <Copy className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button
+                                                        className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#007aff] hover:bg-[#007aff]/10 rounded border border-transparent hover:border-[#007aff]/20 transition-all duration-200"
+                                                        onClick={() => window.open(proxyUrl, '_blank')}
+                                                        title="Open Link"
+                                                    >
+                                                        <ExternalLink className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button 
+                                                onClick={() => handleProxyStop(p.port)}
+                                                className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-[#ff1111] hover:bg-[#ff1111]/10 rounded border border-transparent hover:border-[#ff1111]/20 transition-all duration-200"
+                                                title="Stop Proxy"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                )}
             </div>
-        </div >
+        </div>
     )
 }
