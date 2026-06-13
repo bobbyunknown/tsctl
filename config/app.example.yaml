@@ -1,7 +1,7 @@
 tailscale:
     state_dir: ./tsnet-state
     hostname: tsctl
-    auth_key: ""
+    auth_key: "CHANGE_TS_AUTH_KEY"
     ephemeral: false
 
 logging:
