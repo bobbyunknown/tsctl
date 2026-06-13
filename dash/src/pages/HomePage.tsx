@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { serveApi, funnelApi, proxyApi } from '../lib/api'
-import type { ProxyInfo } from '../lib/api'
+import type { ProxyStatusResponse } from '../lib/api'
 import { useTailscaleWS } from '../hooks/useWebSocket'
 import { ExposureControls } from '../components/ExposureControls'
 import { useConfirm } from '@/contexts/ConfirmContext'
@@ -22,7 +22,7 @@ export default function HomePage() {
     const { authStatus, serveStatus } = useTailscaleWS()
     const { confirm } = useConfirm()
     const [activeServices, setActiveServices] = useState<any>(null)
-    const [proxies, setProxies] = useState<ProxyInfo[]>([])
+    const [proxyStatus, setProxyStatus] = useState<ProxyStatusResponse | null>(null)
 
     const fetchInitial = async () => {
         try {
@@ -36,7 +36,7 @@ export default function HomePage() {
     const fetchProxies = async () => {
         try {
             const proxyData = await proxyApi.getStatus()
-            setProxies(proxyData || [])
+            setProxyStatus(proxyData)
         } catch (error) {
             console.error('Failed to fetch proxy status:', error)
         }
@@ -200,6 +200,8 @@ export default function HomePage() {
     const isConnected = authStatus.authenticated
     const serves = activeServices?.services?.filter((s: any) => s.type === 'serve') || []
     const funnels = activeServices?.services?.filter((s: any) => s.type === 'funnel') || []
+    const proxies = proxyStatus?.proxies || []
+    const isAutoScanActive = proxyStatus?.is_auto_scan_active || false
 
     return (
         <div className="pb-10 text-foreground font-sans">
@@ -277,7 +279,7 @@ export default function HomePage() {
                     {/* LEFT COLUMN: Controls & Services */}
                     <div className="lg:col-span-8 space-y-6">
                         
-                        <ExposureControls onSuccess={() => { fetchInitial(); fetchProxies(); }} />
+                        <ExposureControls proxyStatus={proxyStatus} onSuccess={() => { fetchInitial(); fetchProxies(); }} />
                     </div>
 
                     {/* RIGHT COLUMN: Network Info */}
@@ -327,7 +329,7 @@ export default function HomePage() {
                 </div>
 
                 {/* Unified Active Services Card (FULL WIDTH) */}
-                {isConnected && (serves.length > 0 || funnels.length > 0 || proxies.length > 0) && (
+                {isConnected && (serves.length > 0 || funnels.length > 0 || proxies.length > 0 || isAutoScanActive) && (
                     <div className="bg-card-defi border border-[#02d7f2]/15 rounded overflow-hidden shadow-lg w-full">
                         <div className="border-b border-[#02d7f2]/15 bg-black/40 px-5 py-4 flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -351,7 +353,7 @@ export default function HomePage() {
                                         STOP ALL FUNNELS
                                     </button>
                                 )}
-                                {proxies.length > 0 && (
+                                {(proxies.length > 0 || isAutoScanActive) && (
                                     <button 
                                         onClick={handleProxyStopAll}
                                         className="h-8 px-3 text-[10px] font-bold border border-[#ff1111] text-[#ff1111] hover:bg-[#ff1111] hover:text-black rounded transition-colors uppercase tracking-wider"
@@ -476,8 +478,29 @@ export default function HomePage() {
                             })}
 
                             {/* Render Proxies */}
-                            {proxies.map((p: any) => {
-                                const tailscaleIp = authStatus?.ips?.[0]
+                            {isAutoScanActive ? (
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-[#f2e900]/30 rounded bg-[#f2e900]/5 gap-4 shadow-[inset_0_0_15px_rgba(242,233,0,0.05)]">
+                                    <div className="flex items-center gap-4">
+                                        <div className="px-2.5 py-1 text-[10px] font-bold rounded border border-[#f2e900]/50 text-[#f2e900] bg-[#f2e900]/10 tracking-widest font-mono uppercase">
+                                            GLOBAL PROXY
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-lg font-bold display-font text-[#f2e900] tracking-wider">ACTIVE</span>
+                                            <span className="text-xs text-muted-foreground font-mono mt-1">
+                                                Auto-forwarding {proxies.length} local ports to Tailnet.
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={handleProxyStopAll}
+                                        className="px-4 py-2 text-xs font-bold border border-[#ff1111] text-[#ff1111] hover:bg-[#ff1111] hover:text-black rounded transition-colors uppercase tracking-wider"
+                                    >
+                                        STOP PROXY ALL
+                                    </button>
+                                </div>
+                            ) : (
+                                proxies.map((p: any) => {
+                                    const tailscaleIp = authStatus?.ips?.[0]
                                 const proxyUrl = tailscaleIp ? `http://${tailscaleIp}:${p.port}` : ''
                                 return (
                                     <div key={p.port} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-[#02d7f2]/15 rounded hover:border-[#f2e900]/50 transition-all duration-200 bg-black/60 gap-4 shadow-[inset_0_0_10px_rgba(242,233,0,0.02)]">
@@ -530,8 +553,8 @@ export default function HomePage() {
                                             </button>
                                         </div>
                                     </div>
-                                )
-                            })}
+                                )})
+                            )}
                         </div>
                     </div>
                 )}

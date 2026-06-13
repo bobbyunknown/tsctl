@@ -14,6 +14,14 @@ type PortProxyManager interface {
 	StartAutoScan(interval int, excludePorts []int) error
 	// StopAutoScan stops automatic port discovery
 	StopAutoScan()
+	// IsAutoScanActive returns true if auto scan is currently running
+	IsAutoScanActive() bool
+}
+
+// ProxyStatusResponse represents the overall status of the proxy subsystem
+type ProxyStatusResponse struct {
+	IsAutoScanActive bool            `json:"is_auto_scan_active"`
+	Proxies          []PortProxyInfo `json:"proxies"`
 }
 
 // PortProxyInfo represents info about a proxied port

@@ -124,6 +124,11 @@ export const sshApi = {
     },
 }
 
+export interface ProxyStatusResponse {
+    is_auto_scan_active: boolean
+    proxies: ProxyInfo[]
+}
+
 export const proxyApi = {
     start: async (req: ProxyStartRequest) => {
         const { data } = await api.post<ApiResponse>('/api/v1/proxy/start', req)
@@ -137,8 +142,8 @@ export const proxyApi = {
         const { data } = await api.delete<ApiResponse>('/api/v1/proxy')
         return data
     },
-    getStatus: async (): Promise<ProxyInfo[]> => {
-        const { data } = await api.get<ApiResponse<ProxyInfo[]>>('/api/v1/proxy/status')
+    getStatus: async (): Promise<ProxyStatusResponse> => {
+        const { data } = await api.get<ApiResponse<ProxyStatusResponse>>('/api/v1/proxy/status')
         return data.data!
     },
 }

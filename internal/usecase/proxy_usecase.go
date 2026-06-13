@@ -31,8 +31,11 @@ func (u *ProxyUseCase) StopAll() error {
 	return u.proxy.StopAll()
 }
 
-func (u *ProxyUseCase) GetStatus() []domain.PortProxyInfo {
-	return u.proxy.ActivePorts()
+func (u *ProxyUseCase) GetStatus() domain.ProxyStatusResponse {
+	return domain.ProxyStatusResponse{
+		IsAutoScanActive: u.proxy.IsAutoScanActive(),
+		Proxies:          u.proxy.ActivePorts(),
+	}
 }
 
 func (u *ProxyUseCase) StartAutoScan(interval int, excludePorts []int) error {

@@ -229,6 +229,12 @@ func (p *PortProxyManager) StartAutoScan(interval int, excludePorts []int) error
 	return nil
 }
 
+func (p *PortProxyManager) IsAutoScanActive() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.scanning
+}
+
 func (p *PortProxyManager) scanLoop(ctx context.Context, interval int, excludeSet map[int]bool) {
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()

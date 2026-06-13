@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"tsctl/internal/delivery/http/websocket"
+	"tsctl/internal/domain"
 	"tsctl/internal/usecase"
 	"tsctl/pkg/config"
 
@@ -371,7 +372,11 @@ func (h *Handler) StopAllProxy(ctx context.Context, input *struct{}) (*StopAllPr
 	if err := h.proxyUC.StopAll(); err != nil {
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
-	event := map[string]interface{}{"type": "proxy_status_changed", "data": []interface{}{}}
+	status := domain.ProxyStatusResponse{
+		IsAutoScanActive: false,
+		Proxies:          []domain.PortProxyInfo{},
+	}
+	event := map[string]interface{}{"type": "proxy_status_changed", "data": status}
 	if data, err := json.Marshal(event); err == nil {
 		h.wsHub.Broadcast(data)
 	}
