@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { serveApi, funnelApi, sshApi } from '../lib/api'
+import { serveApi, funnelApi, sshApi, proxyApi } from '../lib/api'
+import type { ProxyInfo } from '../lib/api'
 import { useTailscaleWS } from '../hooks/useWebSocket'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -21,6 +22,8 @@ import {
     Users,
     ExternalLink,
     Copy,
+    Activity,
+    X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -72,8 +75,10 @@ export default function HomePage() {
     const { authStatus, serveStatus } = useTailscaleWS()
     const [servePort, setServePort] = useState('8080')
     const [funnelPort, setFunnelPort] = useState('443')
+    const [proxyPort, setProxyPort] = useState('3000')
     const [loading, setLoading] = useState(false)
     const [activeServices, setActiveServices] = useState<any>(null)
+    const [proxies, setProxies] = useState<ProxyInfo[]>([])
 
     useEffect(() => {
         const fetchInitial = async () => {
@@ -93,6 +98,19 @@ export default function HomePage() {
         }
     }, [serveStatus])
 
+    useEffect(() => {
+        const fetchProxies = async () => {
+            try {
+                const proxyData = await proxyApi.getStatus()
+                setProxies(proxyData || [])
+            } catch (error) {
+                console.error('Failed to fetch proxy status:', error)
+            }
+        }
+        fetchProxies()
+        const interval = setInterval(fetchProxies, 5000)
+        return () => clearInterval(interval)
+    }, [])
 
     const handleServeStart = async () => {
         setLoading(true)
@@ -123,6 +141,46 @@ export default function HomePage() {
             toast.success('SSH access enabled')
         } catch (error: any) {
             toast.error(error.message)
+        }
+        setLoading(false)
+    }
+
+    const handleProxyStart = async () => {
+        if (!proxyPort) return
+        setLoading(true)
+        try {
+            await proxyApi.start({ mode: 'single', port: Number(proxyPort) })
+            toast.success('Proxy started')
+            const proxyData = await proxyApi.getStatus()
+            setProxies(proxyData || [])
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to start proxy')
+        }
+        setLoading(false)
+    }
+
+    const handleProxyStop = async (port: number) => {
+        setLoading(true)
+        try {
+            await proxyApi.stop([port])
+            toast.success(`Proxy stopped for port ${port}`)
+            const proxyData = await proxyApi.getStatus()
+            setProxies(proxyData || [])
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to stop proxy')
+        }
+        setLoading(false)
+    }
+
+    const handleProxyStopAll = async () => {
+        setLoading(true)
+        try {
+            await proxyApi.stopAll()
+            toast.success('All proxies stopped')
+            const proxyData = await proxyApi.getStatus()
+            setProxies(proxyData || [])
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to stop proxies')
         }
         setLoading(false)
     }
@@ -362,11 +420,12 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                <section className="space-y-6 h-full flex flex-col">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Lock className="w-4 h-4 text-emerald-500" />
-                        <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">System Access</h2>
-                    </div>
+                <div className="space-y-6 flex flex-col h-full">
+                    <section className="space-y-6 flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                            <Lock className="w-4 h-4 text-emerald-500" />
+                            <h2 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">System Access & Proxies</h2>
+                        </div>
 
                     <div className="space-y-4">
                         <Card className="group p-5 bg-card/50 backdrop-blur-sm border-border/60 hover:border-emerald-500/30">
@@ -390,8 +449,57 @@ export default function HomePage() {
                                 </div>
                             </div>
                         </Card>
+
+                        <Card className="group p-5 bg-card/50 backdrop-blur-sm border-border/60 hover:border-blue-500/30">
+                            <div className="flex items-center gap-4">
+                                <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-500 group-hover:scale-105 transition-transform">
+                                    <Network className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-semibold text-sm text-blue-500">Local Proxy</h3>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Expose ports</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <Input
+                                        placeholder="3000"
+                                        value={proxyPort}
+                                        onChange={(e) => setProxyPort(e.target.value)}
+                                        className="w-20 font-mono text-center h-9 bg-background/50 focus-visible:border-blue-500/50 focus-visible:ring-blue-500/30"
+                                    />
+                                    <Button onClick={handleProxyStart} disabled={loading} className="h-9 bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-500/20">
+                                        Start
+                                    </Button>
+                                </div>
+                            </div>
+                        </Card>
+
+                        {proxies.length > 0 && (
+                            <Card className="p-4 bg-card/50 border-border/60">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Proxies</span>
+                                    <Button size="sm" variant="ghost" onClick={handleProxyStopAll} className="h-6 px-2 text-xs text-red-500 hover:text-red-400 hover:bg-red-500/10">
+                                        Stop All
+                                    </Button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {proxies.map(p => (
+                                        <Badge key={p.port} variant="secondary" className="flex items-center gap-1.5 py-1 px-2">
+                                            <span className="font-mono text-xs">{p.port}</span>
+                                            <span className="text-[10px] text-muted-foreground opacity-70 uppercase">{p.protocol}</span>
+                                            <button 
+                                                onClick={() => handleProxyStop(p.port)}
+                                                className="ml-1 hover:text-red-500 transition-colors rounded-full hover:bg-background/50 p-0.5 focus:outline-none"
+                                            >
+                                                <X className="w-3 h-3" />
+                                            </button>
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </Card>
+                        )}
                     </div>
-                </section>
+                    </section>
+                </div>
 
             </div>
         </div >
