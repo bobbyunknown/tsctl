@@ -17,7 +17,6 @@ import (
 	"tsctl/pkg/config"
 	"tsctl/pkg/logger"
 
-	_ "tsctl/docs"
 )
 
 // @title Tailscale Controller API
@@ -36,7 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	os.Remove(cfg.Logging.AppLogPath)
+	_ = os.Remove(cfg.Logging.AppLogPath)
 
 	if err := logger.Init(cfg.Logging.AppLogPath, cfg.Logging.Level, cfg.Logging.Format); err != nil {
 		fmt.Printf("failed to initialize logger: %v\n", err)
@@ -50,11 +49,13 @@ func main() {
 	ctx := context.Background()
 
 	tailscaleUC := usecase.NewTailscaleUseCase(tsnetMgr)
+	proxyMgr := repository.NewPortProxyManager(tsnetMgr.GetServer())
+	proxyUC := usecase.NewProxyUseCase(proxyMgr)
 
 	wsHub := websocket.NewWebSocketHub()
 	go wsHub.Run()
 
-	handler := httphandler.NewHandler(tailscaleUC, wsHub)
+	handler := httphandler.NewHandler(tailscaleUC, proxyUC, wsHub)
 	router := httphandler.SetupRouter(handler, cfg.Server.Mode)
 
 	addr := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
@@ -84,6 +85,9 @@ func main() {
 	<-quit
 
 	logger.Log.Info("shutting down server")
+
+	proxyMgr.StopAutoScan()
+	_ = proxyMgr.StopAll()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

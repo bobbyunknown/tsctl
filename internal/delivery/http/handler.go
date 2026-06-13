@@ -2,6 +2,7 @@ package http
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,267 +13,376 @@ import (
 	"tsctl/internal/usecase"
 	"tsctl/pkg/config"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
 	tailscaleUC *usecase.TailscaleUseCase
+	proxyUC     *usecase.ProxyUseCase
 	wsHub       *websocket.Hub
 }
 
-func NewHandler(tailscaleUC *usecase.TailscaleUseCase, wsHub *websocket.Hub) *Handler {
+func NewHandler(tailscaleUC *usecase.TailscaleUseCase, proxyUC *usecase.ProxyUseCase, wsHub *websocket.Hub) *Handler {
 	return &Handler{
 		tailscaleUC: tailscaleUC,
+		proxyUC:     proxyUC,
 		wsHub:       wsHub,
 	}
 }
 
-type Response struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
+type AuthStatusOutput struct {
+	Body APIResponse
 }
 
-type ServeRequest struct {
-	Port       int  `json:"port" binding:"required"`
-	Background bool `json:"background"`
-}
-
-type FunnelRequest struct {
-	Port       int  `json:"port" binding:"required"`
-	Background bool `json:"background"`
-}
-
-func (h *Handler) GetAuthStatus(c *gin.Context) {
+func (h *Handler) GetAuthStatus(ctx context.Context, input *struct{}) (*AuthStatusOutput, error) {
 	status, err := h.tailscaleUC.GetAuthStatus()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
-	c.JSON(200, Response{
-		Success: true,
-		Data:    status,
-	})
+	return &AuthStatusOutput{
+		Body: APIResponse{Success: true, Data: status},
+	}, nil
 }
 
-func (h *Handler) Logout(c *gin.Context) {
+type LogoutOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) Logout(ctx context.Context, input *struct{}) (*LogoutOutput, error) {
 	err := h.tailscaleUC.Logout()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
-	c.JSON(200, Response{
-		Success: true,
-		Message: "logged out from tailnet - restart required to reconnect",
-	})
+	return &LogoutOutput{
+		Body: APIResponse{Success: true, Message: "logged out from tailnet - restart required to reconnect"},
+	}, nil
 }
 
-// @Summary Start serve
-// @Description Start tailscale serve on specified port
-// @Tags tailscale
-// @Accept json
-// @Produce json
-// @Param body body ServeRequest true "Serve configuration"
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/serve [post]
-func (h *Handler) StartServe(c *gin.Context) {
-	var req ServeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, Response{Success: false, Message: err.Error()})
-		return
+type ServeInput struct {
+	Body struct {
+		Port       int  `json:"port" binding:"required"`
+		Background bool `json:"background"`
 	}
+}
 
-	output, err := h.tailscaleUC.StartServe(req.Port, req.Background)
+type ServeOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StartServe(ctx context.Context, input *ServeInput) (*ServeOutput, error) {
+	output, err := h.tailscaleUC.StartServe(input.Body.Port, input.Body.Background)
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
 	status, _ := h.tailscaleUC.GetServeStatus()
 	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
 	if data, err := json.Marshal(event); err == nil {
 		h.wsHub.Broadcast(data)
 	}
-
-	c.JSON(200, Response{Success: true, Message: "serve started", Data: output})
+	return &ServeOutput{
+		Body: APIResponse{Success: true, Message: "serve started", Data: output},
+	}, nil
 }
 
-// @Summary Start funnel
-// @Description Start tailscale funnel on specified port
-// @Tags tailscale
-// @Accept json
-// @Produce json
-// @Param body body FunnelRequest true "Funnel configuration"
-// @Success 200 {object} Response
-// @Failure 400 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/funnel [post]
-func (h *Handler) StartFunnel(c *gin.Context) {
-	var req FunnelRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(400, Response{Success: false, Message: err.Error()})
-		return
+type FunnelInput struct {
+	Body struct {
+		Port       int  `json:"port" binding:"required"`
+		Background bool `json:"background"`
 	}
+}
 
-	output, err := h.tailscaleUC.StartFunnel(req.Port, req.Background)
+type FunnelOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StartFunnel(ctx context.Context, input *FunnelInput) (*FunnelOutput, error) {
+	output, err := h.tailscaleUC.StartFunnel(input.Body.Port, input.Body.Background)
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
 	status, _ := h.tailscaleUC.GetServeStatus()
 	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
 	if data, err := json.Marshal(event); err == nil {
 		h.wsHub.Broadcast(data)
 	}
-
-	c.JSON(200, Response{Success: true, Message: "funnel started", Data: output})
+	return &FunnelOutput{
+		Body: APIResponse{Success: true, Message: "funnel started", Data: output},
+	}, nil
 }
 
-// @Summary Get serve status
-// @Description Get current tailscale serve configuration
-// @Tags tailscale
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/serve/status [get]
-func (h *Handler) ServeStatus(c *gin.Context) {
+type ServeStatusOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) ServeStatus(ctx context.Context, input *struct{}) (*ServeStatusOutput, error) {
 	output, err := h.tailscaleUC.GetServeStatus()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-	c.JSON(200, Response{Success: true, Data: output})
+	return &ServeStatusOutput{
+		Body: APIResponse{Success: true, Data: output},
+	}, nil
 }
 
-// @Summary Get funnel status
-// @Description Get current tailscale funnel configuration
-// @Tags tailscale
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/funnel/status [get]
-func (h *Handler) FunnelStatus(c *gin.Context) {
+type FunnelStatusOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) FunnelStatus(ctx context.Context, input *struct{}) (*FunnelStatusOutput, error) {
 	output, err := h.tailscaleUC.GetFunnelStatus()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-	c.JSON(200, Response{Success: true, Data: output})
+	return &FunnelStatusOutput{
+		Body: APIResponse{Success: true, Data: output},
+	}, nil
 }
 
-// @Summary Reset serve
-// @Description Reset tailscale serve configuration
-// @Tags tailscale
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/serve [delete]
-func (h *Handler) ResetServe(c *gin.Context) {
+type ResetServeOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) ResetServe(ctx context.Context, input *struct{}) (*ResetServeOutput, error) {
 	err := h.tailscaleUC.ResetServe()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
 	status, _ := h.tailscaleUC.GetServeStatus()
 	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
 	if data, err := json.Marshal(event); err == nil {
 		h.wsHub.Broadcast(data)
 	}
-
-	c.JSON(200, Response{Success: true, Message: "serve config reset"})
+	return &ResetServeOutput{
+		Body: APIResponse{Success: true, Message: "serve config reset"},
+	}, nil
 }
 
-// @Summary Reset funnel
-// @Description Reset tailscale funnel configuration
-// @Tags tailscale
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/funnel [delete]
-func (h *Handler) ResetFunnel(c *gin.Context) {
+type ResetFunnelOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) ResetFunnel(ctx context.Context, input *struct{}) (*ResetFunnelOutput, error) {
 	err := h.tailscaleUC.ResetFunnel()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-
 	status, _ := h.tailscaleUC.GetServeStatus()
 	event := map[string]interface{}{"type": "serve_status_changed", "data": status}
 	if data, err := json.Marshal(event); err == nil {
 		h.wsHub.Broadcast(data)
 	}
-
-	c.JSON(200, Response{Success: true, Message: "funnel config reset"})
+	return &ResetFunnelOutput{
+		Body: APIResponse{Success: true, Message: "funnel config reset"},
+	}, nil
 }
 
-// @Summary Enable SSH
-// @Description Enable tailscale SSH access
-// @Tags tailscale
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/ssh/enable [post]
-func (h *Handler) EnableSSH(c *gin.Context) {
+type EnableSSHOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) EnableSSH(ctx context.Context, input *struct{}) (*EnableSSHOutput, error) {
 	err := h.tailscaleUC.EnableSSH()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-	c.JSON(200, Response{Success: true, Message: "ssh enabled"})
+	return &EnableSSHOutput{
+		Body: APIResponse{Success: true, Message: "ssh enabled"},
+	}, nil
 }
 
-// @Summary Get tailscale status
-// @Description Get current tailscale connection status
-// @Tags tailscale
-// @Produce json
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/status [get]
-func (h *Handler) Status(c *gin.Context) {
+type StatusOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) Status(ctx context.Context, input *struct{}) (*StatusOutput, error) {
 	output, err := h.tailscaleUC.GetStatus()
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-	c.JSON(200, Response{Success: true, Data: output})
+	return &StatusOutput{
+		Body: APIResponse{Success: true, Data: output},
+	}, nil
 }
 
-// @Summary Get application logs
-// @Description Get application log file content
-// @Tags logs
-// @Produce json
-// @Param lines query int false "Number of lines to retrieve" default(100)
-// @Success 200 {object} Response
-// @Failure 500 {object} Response
-// @Router /api/v1/logs/app [get]
-func (h *Handler) GetAppLogs(c *gin.Context) {
-	lines := c.DefaultQuery("lines", "100")
+type AppLogsInput struct {
+	Lines int `query:"lines" default:"100"`
+}
+
+type AppLogsOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) GetAppLogs(ctx context.Context, input *AppLogsInput) (*AppLogsOutput, error) {
 	cfg := config.Get()
-	logs, err := readLastLines(cfg.Logging.AppLogPath, lines)
+	logs, err := readLastLines(cfg.Logging.AppLogPath, fmt.Sprintf("%d", input.Lines))
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
+		return nil, huma.Error500InternalServerError(err.Error())
 	}
-	c.JSON(200, Response{Success: true, Data: logs})
+	return &AppLogsOutput{
+		Body: APIResponse{Success: true, Data: logs},
+	}, nil
 }
 
-func (h *Handler) ClearLogs(c *gin.Context) {
-	config := config.Get()
-	logPath := config.Logging.AppLogPath
+type ClearLogsOutput struct {
+	Body APIResponse
+}
 
+func (h *Handler) ClearLogs(ctx context.Context, input *struct{}) (*ClearLogsOutput, error) {
+	cfg := config.Get()
+	logPath := cfg.Logging.AppLogPath
 	err := os.Truncate(logPath, 0)
 	if err != nil {
-		c.JSON(500, Response{Success: false, Message: fmt.Sprintf("Failed to clear logs: %v", err)})
+		return nil, huma.Error500InternalServerError(fmt.Sprintf("Failed to clear logs: %v", err))
+	}
+	return &ClearLogsOutput{
+		Body: APIResponse{Success: true, Message: "Logs cleared successfully"},
+	}, nil
+}
+
+type ProxyStartInput struct {
+	Body struct {
+		Mode         string `json:"mode" binding:"required"`
+		Port         int    `json:"port,omitempty"`
+		Ports        []int  `json:"ports,omitempty"`
+		ExcludePorts []int  `json:"exclude_ports,omitempty"`
+		ScanInterval int    `json:"scan_interval,omitempty"`
+	}
+}
+
+type ProxyStartOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StartProxy(ctx context.Context, input *ProxyStartInput) (*ProxyStartOutput, error) {
+	req := input.Body
+	switch req.Mode {
+	case "single":
+		if req.Port <= 0 {
+			return nil, huma.Error400BadRequest("port is required for single mode")
+		}
+		if err := h.proxyUC.StartPorts([]int{req.Port}); err != nil {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+	case "multi":
+		if len(req.Ports) == 0 {
+			return nil, huma.Error400BadRequest("ports is required for multi mode")
+		}
+		if err := h.proxyUC.StartPorts(req.Ports); err != nil {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+	case "all":
+		interval := req.ScanInterval
+		if interval <= 0 {
+			interval = 5
+		}
+		if err := h.proxyUC.StartAutoScan(interval, req.ExcludePorts); err != nil {
+			return nil, huma.Error500InternalServerError(err.Error())
+		}
+	default:
+		return nil, huma.Error400BadRequest("mode must be single, multi, or all")
+	}
+	status := h.proxyUC.GetStatus()
+	event := map[string]interface{}{"type": "proxy_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+	return &ProxyStartOutput{
+		Body: APIResponse{Success: true, Message: fmt.Sprintf("proxy started (mode: %s)", req.Mode), Data: status},
+	}, nil
+}
+
+type ProxyStopInput struct {
+	Body struct {
+		Ports []int `json:"ports" binding:"required"`
+	}
+}
+
+type ProxyStopOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StopProxy(ctx context.Context, input *ProxyStopInput) (*ProxyStopOutput, error) {
+	if err := h.proxyUC.StopPorts(input.Body.Ports); err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	status := h.proxyUC.GetStatus()
+	event := map[string]interface{}{"type": "proxy_status_changed", "data": status}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+	return &ProxyStopOutput{
+		Body: APIResponse{Success: true, Message: "proxy stopped", Data: status},
+	}, nil
+}
+
+type StopAllProxyOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) StopAllProxy(ctx context.Context, input *struct{}) (*StopAllProxyOutput, error) {
+	h.proxyUC.StopAutoScan()
+	if err := h.proxyUC.StopAll(); err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
+	event := map[string]interface{}{"type": "proxy_status_changed", "data": []interface{}{}}
+	if data, err := json.Marshal(event); err == nil {
+		h.wsHub.Broadcast(data)
+	}
+	return &StopAllProxyOutput{
+		Body: APIResponse{Success: true, Message: "all proxies stopped"},
+	}, nil
+}
+
+type ProxyStatusOutput struct {
+	Body APIResponse
+}
+
+func (h *Handler) ProxyStatus(ctx context.Context, input *struct{}) (*ProxyStatusOutput, error) {
+	status := h.proxyUC.GetStatus()
+	return &ProxyStatusOutput{
+		Body: APIResponse{Success: true, Data: status},
+	}, nil
+}
+
+// ProxyAvatar needs raw gin.Context so stay as Gin handler
+
+func (h *Handler) ProxyAvatar(c *gin.Context) {
+	status, err := h.tailscaleUC.GetAuthStatus()
+	if err != nil {
+		c.JSON(500, APIResponse{Success: false, Message: err.Error()})
 		return
 	}
 
-	c.JSON(200, Response{Success: true, Message: "Logs cleared successfully"})
+	avatarURL, ok := status["user_profile_pic"].(string)
+	if !ok || avatarURL == "" {
+		c.Status(404)
+		return
+	}
+
+	resp, err := http.Get(avatarURL)
+	if err != nil {
+		c.Status(500)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		c.Status(resp.StatusCode)
+		return
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+	c.Header("Cache-Control", "public, max-age=3600")
+
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		c.Status(500)
+		return
+	}
 }
 
 func readLastLines(filePath string, linesCount string) ([]string, error) {
@@ -280,7 +390,7 @@ func readLastLines(filePath string, linesCount string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var lines []string
 	scanner := bufio.NewScanner(file)
@@ -293,52 +403,10 @@ func readLastLines(filePath string, linesCount string) ([]string, error) {
 	}
 
 	count := 100
+		_, _ = fmt.Sscanf(linesCount, "%d", &count)
 	if len(lines) < count {
 		return lines, nil
 	}
 
 	return lines[len(lines)-count:], nil
-}
-
-// ProxyAvatar proxies avatar images from external sources (Google, GitHub, etc)
-// to avoid CORS issues in the browser
-func (h *Handler) ProxyAvatar(c *gin.Context) {
-	status, err := h.tailscaleUC.GetAuthStatus()
-	if err != nil {
-		c.JSON(500, Response{Success: false, Message: err.Error()})
-		return
-	}
-
-	avatarURL, ok := status["user_profile_pic"].(string)
-	if !ok || avatarURL == "" {
-		c.Status(404)
-		return
-	}
-
-	// Fetch the avatar from external URL
-	resp, err := http.Get(avatarURL)
-	if err != nil {
-		c.Status(500)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		c.Status(resp.StatusCode)
-		return
-	}
-
-	// Set appropriate headers
-	contentType := resp.Header.Get("Content-Type")
-	if contentType != "" {
-		c.Header("Content-Type", contentType)
-	}
-	c.Header("Cache-Control", "public, max-age=3600")
-
-	// Copy the image data
-	_, err = io.Copy(c.Writer, resp.Body)
-	if err != nil {
-		c.Status(500)
-		return
-	}
 }

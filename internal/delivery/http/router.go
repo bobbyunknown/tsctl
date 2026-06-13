@@ -1,10 +1,11 @@
 package http
 
 import (
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func SetupRouter(handler *Handler, mode string) *gin.Engine {
@@ -24,40 +25,126 @@ func SetupRouter(handler *Handler, mode string) *gin.Engine {
 		AllowCredentials: false,
 	}))
 
-	router.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	// SetuP Huma API
+	api := SetupHuma(router)
 
-	api := router.Group("/api/v1")
-	{
-		api.GET("/ws", handler.HandleWebSocket)
-		api.GET("/avatar", handler.ProxyAvatar)
+	// WebSocket & Avatar needs raw gin access
+	v1 := router.Group("/api/v1")
+	v1.GET("/ws", handler.HandleWebSocket)
+	v1.GET("/avatar", handler.ProxyAvatar)
 
-		auth := api.Group("/auth")
-		{
-			auth.GET("/status", handler.GetAuthStatus)
-			auth.POST("/logout", handler.Logout)
-		}
+	// Huma-registered endpoints
+	huma.Register(api, huma.Operation{
+		OperationID: "get-auth-status",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/auth/status",
+		Tags:        []string{"auth"},
+	}, handler.GetAuthStatus)
 
-		api.POST("/serve", handler.StartServe)
-		api.GET("/serve/status", handler.ServeStatus)
-		api.DELETE("/serve", handler.ResetServe)
+	huma.Register(api, huma.Operation{
+		OperationID: "logout",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/logout",
+		Tags:        []string{"auth"},
+	}, handler.Logout)
 
-		api.POST("/funnel", handler.StartFunnel)
-		api.GET("/funnel/status", handler.FunnelStatus)
-		api.DELETE("/funnel", handler.ResetFunnel)
+	huma.Register(api, huma.Operation{
+		OperationID: "start-serve",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/serve",
+		Tags:        []string{"tailscale"},
+	}, handler.StartServe)
 
-		ssh := api.Group("/ssh")
-		{
-			ssh.POST("/enable", handler.EnableSSH)
-		}
+	huma.Register(api, huma.Operation{
+		OperationID: "serve-status",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/serve/status",
+		Tags:        []string{"tailscale"},
+	}, handler.ServeStatus)
 
-		api.GET("/status", handler.Status)
+	huma.Register(api, huma.Operation{
+		OperationID: "reset-serve",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/serve",
+		Tags:        []string{"tailscale"},
+	}, handler.ResetServe)
 
-		logs := api.Group("/logs")
-		{
-			logs.GET("/app", handler.GetAppLogs)
-			logs.DELETE("/app", handler.ClearLogs)
-		}
-	}
+	huma.Register(api, huma.Operation{
+		OperationID: "start-funnel",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/funnel",
+		Tags:        []string{"tailscale"},
+	}, handler.StartFunnel)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "funnel-status",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/funnel/status",
+		Tags:        []string{"tailscale"},
+	}, handler.FunnelStatus)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "reset-funnel",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/funnel",
+		Tags:        []string{"tailscale"},
+	}, handler.ResetFunnel)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "enable-ssh",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/ssh/enable",
+		Tags:        []string{"ssh"},
+	}, handler.EnableSSH)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-status",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/status",
+		Tags:        []string{"tailscale"},
+	}, handler.Status)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "start-proxy",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/proxy/start",
+		Tags:        []string{"proxy"},
+	}, handler.StartProxy)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "stop-proxy",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/proxy/stop",
+		Tags:        []string{"proxy"},
+	}, handler.StopProxy)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "stop-all-proxy",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/proxy",
+		Tags:        []string{"proxy"},
+	}, handler.StopAllProxy)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "proxy-status",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/proxy/status",
+		Tags:        []string{"proxy"},
+	}, handler.ProxyStatus)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-logs",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/logs/app",
+		Tags:        []string{"logs"},
+	}, handler.GetAppLogs)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "clear-logs",
+		Method:      http.MethodDelete,
+		Path:        "/api/v1/logs/app",
+		Tags:        []string{"logs"},
+	}, handler.ClearLogs)
 
 	return router
 }
